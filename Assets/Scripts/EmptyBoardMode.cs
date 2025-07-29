@@ -8,10 +8,7 @@ public class EmptyBoardMode : MonoBehaviour
     [Header("UI References")]
     public TextMeshProUGUI targetSquareText;
     public TextMeshProUGUI scoreText;
-    public TextMeshProUGUI accuracyText;
-    public Button startButton;
-    public Button resetButton;
-    public RectTransform leftPanel;
+    public TextMeshProUGUI coordinateFlashText;
 
     [Header("Chess Board")]
     public RectTransform boardParent; // This is your ChessBoardPanel with Grid Layout Group
@@ -30,36 +27,57 @@ public class EmptyBoardMode : MonoBehaviour
     [Header("Game Settings")]
     public float feedbackDuration = 1f;
 
+    [Header("Chess Piece Prefabs")]
+    public GameObject whitePawnPrefab;
+    public GameObject whiteKnightPrefab;
+    public GameObject whiteBishopPrefab;
+    public GameObject whiteRookPrefab;
+    public GameObject whiteQueenPrefab;
+    public GameObject whiteKingPrefab;
+
+    public GameObject blackPawnPrefab;
+    public GameObject blackKnightPrefab;
+    public GameObject blackBishopPrefab;
+    public GameObject blackRookPrefab;
+    public GameObject blackQueenPrefab;
+    public GameObject blackKingPrefab;
+
+
+
+
+
     private Image[,] chessSquares = new Image[8, 8];
     private GridLayoutGroup gridLayout;
-    private bool gameStarted = false;
-
     // Game state
     private int currentTargetRow;
     private int currentTargetCol;
     private int score = 0;
     private int totalAttempts = 0;
     private int correctAttempts = 0;
+    private bool gameStarted = false;
 
     void Start()
     {
         SetupUI();
         SetupChessBoard();
-        SetupButtons();
         AutoResizeBoard();
+
+        // Automatically start the game without button press
+        gameStarted = true;
+        score = 0;
+        totalAttempts = 0;
+        correctAttempts = 0;
+
+        UpdateUI();
+        GenerateNewTarget();
+        ResetBoardColors();
     }
 
     void SetupUI()
     {
         // Initialize UI text
-        if (targetSquareText != null)
-            targetSquareText.text = "Click Start to Begin";
-
         if (scoreText != null)
             scoreText.text = "Score: 0";
-
-        if (accuracyText != null)
-            accuracyText.text = "Accuracy: 0%";
     }
 
     void AutoResizeBoard()
@@ -196,68 +214,22 @@ public class EmptyBoardMode : MonoBehaviour
         }
     }
 
-    void SetupButtons()
-    {
-        if (startButton != null)
-        {
-            startButton.onClick.RemoveAllListeners();
-            startButton.onClick.AddListener(OnStartGame);
-        }
-
-        if (resetButton != null)
-        {
-            resetButton.onClick.RemoveAllListeners();
-            resetButton.onClick.AddListener(OnResetGame);
-        }
-    }
-
-    // PUBLIC FUNCTIONS FOR BUTTON CLICKS
-    public void OnStartGame()
-    {
-        gameStarted = true;
-        score = 0;
-        totalAttempts = 0;
-        correctAttempts = 0;
-
-        Debug.Log("Game Started!");
-
-        UpdateUI();
-        GenerateNewTarget();
-        ResetBoardColors();
-    }
-
-    public void OnResetGame()
-    {
-        gameStarted = false;
-        score = 0;
-        totalAttempts = 0;
-        correctAttempts = 0;
-
-        Debug.Log("Game Reset!");
-
-        if (targetSquareText != null)
-            targetSquareText.text = "Click Start to Begin";
-
-        UpdateUI();
-        ResetBoardColors();
-    }
-
     void GenerateNewTarget()
     {
         if (!gameStarted) return;
 
-        // Generate random target square
         currentTargetRow = UnityEngine.Random.Range(0, 8);
         currentTargetCol = UnityEngine.Random.Range(0, 8);
 
-        // Update UI to show the target
-        if (targetSquareText != null)
-        {
-            string targetSquare = GetSquareName(currentTargetRow, currentTargetCol);
-            targetSquareText.text = $"Find: {targetSquare}";
-        }
+        string targetSquare = GetSquareName(currentTargetRow, currentTargetCol).ToLower();
 
-        Debug.Log($"New target: {GetSquareName(currentTargetRow, currentTargetCol)} (Row: {currentTargetRow}, Col: {currentTargetCol})");
+        if (targetSquareText != null)
+            targetSquareText.text = $"{targetSquare}";
+
+
+        // Start the coordinate flash coroutine to show it semi-transparent for 1 second
+        if (coordinateFlashText != null)
+            StartCoroutine(FlashCoordinate(targetSquare));
     }
 
     void OnSquareClicked(int row, int col)
@@ -274,19 +246,22 @@ public class EmptyBoardMode : MonoBehaviour
         {
             // Correct answer!
             correctAttempts++;
-            score += 10;
+            score += 1;
 
             // Show green feedback
             if (chessSquares[row, col] != null)
             {
                 chessSquares[row, col].color = correctColor;
+
+                // Reset that one square's color after a short delay
+                StartCoroutine(ResetSquareColor(row, col, feedbackDuration));
             }
 
-            // Update UI
+            // Update score
             UpdateUI();
 
-            // Generate new target after delay
-            StartCoroutine(GenerateNewTargetAfterDelay());
+            // Immediately generate next target
+            GenerateNewTarget();
         }
         else
         {
@@ -299,20 +274,9 @@ public class EmptyBoardMode : MonoBehaviour
                 StartCoroutine(ResetSquareColor(row, col, feedbackDuration));
             }
 
-            // Update UI (accuracy will change)
+            // Update UI
             UpdateUI();
         }
-    }
-
-    IEnumerator GenerateNewTargetAfterDelay()
-    {
-        yield return new WaitForSeconds(feedbackDuration);
-
-        // Reset board colors
-        ResetBoardColors();
-
-        // Generate new target
-        GenerateNewTarget();
     }
 
     IEnumerator ResetSquareColor(int row, int col, float delay)
@@ -329,13 +293,7 @@ public class EmptyBoardMode : MonoBehaviour
     void UpdateUI()
     {
         if (scoreText != null)
-            scoreText.text = $"Score: {score}";
-
-        if (accuracyText != null)
-        {
-            float accuracy = totalAttempts > 0 ? (correctAttempts * 100f / totalAttempts) : 100f;
-            accuracyText.text = $"Accuracy: {accuracy:F1}%";
-        }
+            scoreText.text = $"{score}";
     }
 
     void ResetBoardColors()
@@ -397,5 +355,36 @@ public class EmptyBoardMode : MonoBehaviour
         {
             ResizeBoard();
         }
+    }
+
+    IEnumerator FlashCoordinate(string text)
+    {
+        // Only proceed if coordinateFlashText is assigned
+        if (coordinateFlashText == null)
+        {
+            Debug.LogWarning("coordinateFlashText is not assigned!");
+            yield break;
+        }
+
+        Debug.Log("Flashing coordinate: " + text);
+
+        // Set the text
+        coordinateFlashText.text = text;
+
+        // Make it semi-transparent (70% opacity)
+        Color c = coordinateFlashText.color;
+        c.a = 0.7f;
+        coordinateFlashText.color = c;
+
+        // Make sure it is visible
+        coordinateFlashText.gameObject.SetActive(true);
+
+        // Wait for 1 second
+        yield return new WaitForSeconds(1f);
+
+        // Hide the text again (fully transparent and inactive)
+        c.a = 0f;
+        coordinateFlashText.color = c;
+        coordinateFlashText.gameObject.SetActive(false);
     }
 }
