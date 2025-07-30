@@ -27,20 +27,6 @@ public class EmptyBoardMode : MonoBehaviour
     [Header("Game Settings")]
     public float feedbackDuration = 1f;
 
-    [Header("Chess Piece Prefabs")]
-    public GameObject whitePawnPrefab;
-    public GameObject whiteKnightPrefab;
-    public GameObject whiteBishopPrefab;
-    public GameObject whiteRookPrefab;
-    public GameObject whiteQueenPrefab;
-    public GameObject whiteKingPrefab;
-
-    public GameObject blackPawnPrefab;
-    public GameObject blackKnightPrefab;
-    public GameObject blackBishopPrefab;
-    public GameObject blackRookPrefab;
-    public GameObject blackQueenPrefab;
-    public GameObject blackKingPrefab;
 
 
 
