@@ -21,11 +21,9 @@ public class ChessSquareGuessingGame : MonoBehaviour
 
     void Start()
     {
-        // Add silver/gray borders to buttons
         AddBorderToButton(blackSquareButton);
         AddBorderToButton(whiteSquareButton);
 
-        // Generate first random square
         GenerateRandomSquare();
         UpdateUI();
     }
@@ -34,34 +32,22 @@ public class ChessSquareGuessingGame : MonoBehaviour
     {
         Outline outline = button.gameObject.AddComponent<Outline>();
         outline.effectColor = new Color(0.7f, 0.7f, 0.7f, 1f); // Silver/gray color
-        outline.effectDistance = new Vector2(3, 3); // Border thickness
-
-        // Make sure button is still interactable
+        outline.effectDistance = new Vector2(3, 3);
         button.interactable = true;
     }
 
     void GenerateRandomSquare()
     {
-        // Generate random file (a-h) and rank (1-8)
         char randomFile = files[Random.Range(0, files.Length)];
         int randomRank = ranks[Random.Range(0, ranks.Length)];
-
-        // Create coordinate string
         currentCoordinate = randomFile.ToString() + randomRank.ToString();
-
-        // Determine if square is black or white
         isCurrentSquareBlack = IsSquareBlack(randomFile, randomRank);
-
         Debug.Log($"Generated square: {currentCoordinate}, Is Black: {isCurrentSquareBlack}");
     }
 
     bool IsSquareBlack(char file, int rank)
     {
-        // Convert file to number (a=1, b=2, c=3, etc.)
         int fileNumber = file - 'a' + 1;
-
-        // Chess rule: square is black if (file + rank) is odd
-        // This works because a1 is a dark square in standard chess notation
         return (fileNumber + rank) % 2 == 0;
     }
 
@@ -71,24 +57,30 @@ public class ChessSquareGuessingGame : MonoBehaviour
 
         if (guessedBlack == isCurrentSquareBlack)
         {
-            // Correct guess!
             score++;
 
-            // Generate new square for next round
+            // Play correct sound
+            if (UIButtonHoverSound.Instance != null)
+                UIButtonHoverSound.Instance.PlayCorrectSound();
+
             GenerateRandomSquare();
         }
-        // Wrong guess - stay on same square, no feedback needed
+        else
+        {
+            // Play wrong sound
+            if (UIButtonHoverSound.Instance != null)
+                UIButtonHoverSound.Instance.PlayWrongSound();
+        }
 
         UpdateUI();
     }
 
     void UpdateUI()
     {
-        coordinateText.text = currentCoordinate.ToUpper();
-        scoreText.text = $"Score: {score}/{attempts}";
+        coordinateText.text = currentCoordinate.ToLower(); // Always lowercase
+        scoreText.text = $"{score}/{attempts}"; // No "Score:" prefix
     }
 
-    // Optional: Reset game
     public void ResetGame()
     {
         score = 0;

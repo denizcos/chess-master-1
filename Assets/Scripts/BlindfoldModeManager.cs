@@ -73,6 +73,7 @@ public class BlindfoldModeManager : MonoBehaviour
     private Vector2Int enPassantTarget = new Vector2Int(-1, -1); // En passant target square
     private Vector2Int lastPawnDoubleMove = new Vector2Int(-1, -1); // Last pawn that moved two squares
 
+
     void Start()
     {
         currentRevealCount = maxRevealCount;
@@ -726,6 +727,11 @@ public class BlindfoldModeManager : MonoBehaviour
         }
 
         Debug.Log($"Board state updated: {piece.color} {piece.type} moved to [{toRow},{toCol}]");
+        if (capturedPiece != null)
+            UIButtonHoverSound.Instance?.PlayCapture();
+        else
+            UIButtonHoverSound.Instance?.PlayMove();
+
 
         if (isEnPassant)
         {
@@ -879,6 +885,7 @@ public class BlindfoldModeManager : MonoBehaviour
         }
         else if (IsInCheck(currentColor))
         {
+            UIButtonHoverSound.Instance?.PlayCheck();
             string playerInCheck = currentColor == PieceColor.White ? "White" : "Black";
             moveLogText.text += $"{playerInCheck} is in check! ";
             ShowErrorMessage($"{playerInCheck} is in check!");
@@ -1321,4 +1328,5 @@ public class BlindfoldModeManager : MonoBehaviour
         Debug.Log($"Black can castle kingside: {CanCastle(PieceColor.Black, true)}");
         Debug.Log($"Black can castle queenside: {CanCastle(PieceColor.Black, false)}");
     }
+
 }

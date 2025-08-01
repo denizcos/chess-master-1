@@ -11,12 +11,12 @@ public class EmptyBoardMode : MonoBehaviour
     public TextMeshProUGUI coordinateFlashText;
 
     [Header("Chess Board")]
-    public RectTransform boardParent; // This is your ChessBoardPanel with Grid Layout Group
+    public RectTransform boardParent;
     public GameObject squarePrefab;
 
     [Header("Board Layout Settings")]
-    public float squareSize = 92f; // 92px squares
-    public float boardSpacing = 0f; // No spacing
+    public float squareSize = 92f;
+    public float boardSpacing = 0f;
 
     [Header("Colors")]
     public Color lightSquareColor = Color.white;
@@ -27,14 +27,9 @@ public class EmptyBoardMode : MonoBehaviour
     [Header("Game Settings")]
     public float feedbackDuration = 1f;
 
-
-
-
-
-
     private Image[,] chessSquares = new Image[8, 8];
     private GridLayoutGroup gridLayout;
-    // Game state
+
     private int currentTargetRow;
     private int currentTargetCol;
     private int score = 0;
@@ -42,13 +37,15 @@ public class EmptyBoardMode : MonoBehaviour
     private int correctAttempts = 0;
     private bool gameStarted = false;
 
+    // Track flash coroutine to prevent overlap
+    private Coroutine flashRoutine;
+
     void Start()
     {
         SetupUI();
         SetupChessBoard();
         AutoResizeBoard();
 
-        // Automatically start the game without button press
         gameStarted = true;
         score = 0;
         totalAttempts = 0;
@@ -61,7 +58,6 @@ public class EmptyBoardMode : MonoBehaviour
 
     void SetupUI()
     {
-        // Initialize UI text
         if (scoreText != null)
             scoreText.text = "Score: 0";
     }
@@ -70,17 +66,10 @@ public class EmptyBoardMode : MonoBehaviour
     {
         if (boardParent == null) return;
 
-        // Get available space in the board parent
-        float availableWidth = boardParent.rect.width - 20f; // 10px margin on each side
-        float availableHeight = boardParent.rect.height - 20f; // 10px margin on each side
-
-        // Use the smaller dimension to keep board square
+        float availableWidth = boardParent.rect.width - 20f;
+        float availableHeight = boardParent.rect.height - 20f;
         float availableSize = Mathf.Min(availableWidth, availableHeight);
-
-        // Calculate square size (8 squares + 7 spaces between them)
         float calculatedSquareSize = (availableSize - (boardSpacing * 7)) / 8f;
-
-        // Set limits: minimum 60px, maximum 100px
         squareSize = Mathf.Clamp(calculatedSquareSize, 60f, 100f);
 
         ResizeBoard();
@@ -94,7 +83,6 @@ public class EmptyBoardMode : MonoBehaviour
             return;
         }
 
-        // Get Grid Layout Group
         gridLayout = boardParent.GetComponent<GridLayoutGroup>();
         if (gridLayout == null)
         {
@@ -102,16 +90,9 @@ public class EmptyBoardMode : MonoBehaviour
             return;
         }
 
-        // Configure Grid Layout Group
         ConfigureGridLayout();
-
-        // Clear existing squares
         ClearBoard();
-
-        // Create chess squares
         CreateChessSquares();
-
-        // Ensure proper sizing
         ResizeBoard();
     }
 
@@ -128,7 +109,6 @@ public class EmptyBoardMode : MonoBehaviour
 
     void ClearBoard()
     {
-        // Clear existing squares
         for (int i = boardParent.childCount - 1; i >= 0; i--)
         {
             if (Application.isPlaying)
@@ -137,7 +117,6 @@ public class EmptyBoardMode : MonoBehaviour
                 DestroyImmediate(boardParent.GetChild(i).gameObject);
         }
 
-        // Clear array
         chessSquares = new Image[8, 8];
     }
 
@@ -147,34 +126,27 @@ public class EmptyBoardMode : MonoBehaviour
         {
             for (int col = 0; col < 8; col++)
             {
-                // Create square
                 GameObject square = Instantiate(squarePrefab, boardParent);
                 square.name = $"Square_{row}_{col}";
 
-                // Get or add Image component
                 Image squareImage = square.GetComponent<Image>();
                 if (squareImage == null)
                     squareImage = square.AddComponent<Image>();
 
-                // Set square color (checkerboard pattern)
                 bool isLightSquare = (row + col) % 2 == 0;
                 squareImage.color = isLightSquare ? lightSquareColor : darkSquareColor;
 
-                // Store reference
                 chessSquares[row, col] = squareImage;
 
-                // Get or add Button component
                 Button squareButton = square.GetComponent<Button>();
                 if (squareButton == null)
                     squareButton = square.AddComponent<Button>();
 
-                // Add click handler
                 int capturedRow = row;
                 int capturedCol = col;
                 squareButton.onClick.RemoveAllListeners();
                 squareButton.onClick.AddListener(() => OnSquareClicked(capturedRow, capturedCol));
 
-                // Ensure proper layout element
                 LayoutElement layoutElement = square.GetComponent<LayoutElement>();
                 if (layoutElement == null)
                     layoutElement = square.AddComponent<LayoutElement>();
@@ -186,14 +158,10 @@ public class EmptyBoardMode : MonoBehaviour
     {
         if (gridLayout == null) return;
 
-        // Update grid cell size
         gridLayout.cellSize = new Vector2(squareSize, squareSize);
         gridLayout.spacing = new Vector2(boardSpacing, boardSpacing);
 
-        // Calculate total board size
         float totalBoardSize = (squareSize * 8) + (boardSpacing * 7);
-
-        // Adjust board parent size if needed
         if (boardParent != null)
         {
             boardParent.sizeDelta = new Vector2(totalBoardSize, totalBoardSize);
@@ -206,16 +174,19 @@ public class EmptyBoardMode : MonoBehaviour
 
         currentTargetRow = UnityEngine.Random.Range(0, 8);
         currentTargetCol = UnityEngine.Random.Range(0, 8);
-
         string targetSquare = GetSquareName(currentTargetRow, currentTargetCol).ToLower();
 
         if (targetSquareText != null)
             targetSquareText.text = $"{targetSquare}";
 
-
-        // Start the coordinate flash coroutine to show it semi-transparent for 1 second
+        // Fix: Stop previous flash before starting new one
         if (coordinateFlashText != null)
-            StartCoroutine(FlashCoordinate(targetSquare));
+        {
+            if (flashRoutine != null)
+                StopCoroutine(flashRoutine);
+
+            flashRoutine = StartCoroutine(FlashCoordinate(targetSquare));
+        }
     }
 
     void OnSquareClicked(int row, int col)
@@ -225,42 +196,26 @@ public class EmptyBoardMode : MonoBehaviour
         totalAttempts++;
 
         bool isCorrect = (row == currentTargetRow && col == currentTargetCol);
-
         Debug.Log($"Clicked: {GetSquareName(row, col)} - Target: {GetSquareName(currentTargetRow, currentTargetCol)} - {(isCorrect ? "CORRECT" : "WRONG")}");
 
         if (isCorrect)
         {
-            // Correct answer!
             correctAttempts++;
             score += 1;
 
-            // Show green feedback
             if (chessSquares[row, col] != null)
-            {
                 chessSquares[row, col].color = correctColor;
 
-                // Reset that one square's color after a short delay
-                StartCoroutine(ResetSquareColor(row, col, feedbackDuration));
-            }
-
-            // Update score
+            StartCoroutine(ResetSquareColor(row, col, feedbackDuration));
             UpdateUI();
-
-            // Immediately generate next target
             GenerateNewTarget();
         }
         else
         {
-            // Wrong answer!
-            // Show red feedback
             if (chessSquares[row, col] != null)
-            {
                 chessSquares[row, col].color = incorrectColor;
-                // Reset color after delay
-                StartCoroutine(ResetSquareColor(row, col, feedbackDuration));
-            }
 
-            // Update UI
+            StartCoroutine(ResetSquareColor(row, col, feedbackDuration));
             UpdateUI();
         }
     }
@@ -304,7 +259,6 @@ public class EmptyBoardMode : MonoBehaviour
         return $"{file}{rank}";
     }
 
-    // Public methods for external control
     public void SetSquareSize(float newSize)
     {
         squareSize = newSize;
@@ -325,7 +279,6 @@ public class EmptyBoardMode : MonoBehaviour
         }
     }
 
-    // Handle screen resize
     void OnRectTransformDimensionsChange()
     {
         if (gridLayout != null)
@@ -334,7 +287,6 @@ public class EmptyBoardMode : MonoBehaviour
         }
     }
 
-    // Handle inspector changes in editor
     void OnValidate()
     {
         if (Application.isPlaying && gridLayout != null)
@@ -345,7 +297,6 @@ public class EmptyBoardMode : MonoBehaviour
 
     IEnumerator FlashCoordinate(string text)
     {
-        // Only proceed if coordinateFlashText is assigned
         if (coordinateFlashText == null)
         {
             Debug.LogWarning("coordinateFlashText is not assigned!");
@@ -353,22 +304,15 @@ public class EmptyBoardMode : MonoBehaviour
         }
 
         Debug.Log("Flashing coordinate: " + text);
-
-        // Set the text
         coordinateFlashText.text = text;
 
-        // Make it semi-transparent (70% opacity)
         Color c = coordinateFlashText.color;
         c.a = 0.7f;
         coordinateFlashText.color = c;
-
-        // Make sure it is visible
         coordinateFlashText.gameObject.SetActive(true);
 
-        // Wait for 1 second
-        yield return new WaitForSeconds(1f);
+        yield return new WaitForSeconds(1.2f);
 
-        // Hide the text again (fully transparent and inactive)
         c.a = 0f;
         coordinateFlashText.color = c;
         coordinateFlashText.gameObject.SetActive(false);

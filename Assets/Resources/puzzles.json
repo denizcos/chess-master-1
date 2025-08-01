@@ -1,0 +1,23 @@
+[
+  {
+    "id": "puzzle_001",
+    "fen": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3",
+    "solution": ["Nxe5", "Nxe5", "d4"],
+    "difficulty": "easy",
+    "theme": "center control"
+  },
+  {
+    "id": "puzzle_002",
+    "fen": "r2qk2r/ppp2ppp/2n1bn2/3p4/3P4/2PB1N2/PP3PPP/RNBQ1RK1 w kq - 2 8",
+    "solution": ["Re1", "O-O", "Bg5", "h6", "Bh4"],
+    "difficulty": "medium",
+    "theme": "pin"
+  },
+  {
+    "id": "puzzle_003",
+    "fen": "rnbqkb1r/pp3ppp/3p1n2/2p1p3/4P3/2NP1N2/PPP2PPP/R1BQKB1R w KQkq - 0 5",
+    "solution": ["g3", "Be7", "Bg2", "O-O", "O-O"],
+    "difficulty": "easy",
+    "theme": "development"
+  }
+]
