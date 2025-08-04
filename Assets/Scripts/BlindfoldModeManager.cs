@@ -2173,4 +2173,21 @@ public class BlindfoldModeManager : MonoBehaviour
             ShowErrorMessage("Stockfish engine not ready!");
         }
     }
+    public void OnSaveLogClicked()
+{
+    string logText = moveLogText.text;
+    string filePath = Path.Combine(Application.persistentDataPath, "blindfold_game_log.txt");
+
+    try
+    {
+        File.WriteAllText(filePath, logText);
+        ShowErrorMessage($"Log saved to: {filePath}");
+        UnityEngine.Debug.Log($"Move log saved to {filePath}");
+    }
+    catch (System.Exception e)
+    {
+        ShowErrorMessage("Failed to save log: " + e.Message);
+    }
+}
+
 }

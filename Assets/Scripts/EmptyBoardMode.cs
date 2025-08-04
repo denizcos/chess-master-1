@@ -27,6 +27,9 @@ public class EmptyBoardMode : MonoBehaviour
     [Header("Game Settings")]
     public float feedbackDuration = 1f;
 
+    [Header("Perspective Settings")]
+    public bool isWhitePerspective = true;
+
     private Image[,] chessSquares = new Image[8, 8];
     private GridLayoutGroup gridLayout;
 
@@ -37,7 +40,6 @@ public class EmptyBoardMode : MonoBehaviour
     private int correctAttempts = 0;
     private bool gameStarted = false;
 
-    // Track flash coroutine to prevent overlap
     private Coroutine flashRoutine;
 
     void Start()
@@ -111,10 +113,7 @@ public class EmptyBoardMode : MonoBehaviour
     {
         for (int i = boardParent.childCount - 1; i >= 0; i--)
         {
-            if (Application.isPlaying)
-                Destroy(boardParent.GetChild(i).gameObject);
-            else
-                DestroyImmediate(boardParent.GetChild(i).gameObject);
+            Destroy(boardParent.GetChild(i).gameObject);
         }
 
         chessSquares = new Image[8, 8];
@@ -122,9 +121,17 @@ public class EmptyBoardMode : MonoBehaviour
 
     void CreateChessSquares()
     {
-        for (int row = 0; row < 8; row++)
+        int rowStart = isWhitePerspective ? 0 : 7;
+        int rowEnd = isWhitePerspective ? 8 : -1;
+        int rowStep = isWhitePerspective ? 1 : -1;
+
+        int colStart = isWhitePerspective ? 0 : 7;
+        int colEnd = isWhitePerspective ? 8 : -1;
+        int colStep = isWhitePerspective ? 1 : -1;
+
+        for (int row = rowStart; row != rowEnd; row += rowStep)
         {
-            for (int col = 0; col < 8; col++)
+            for (int col = colStart; col != colEnd; col += colStep)
             {
                 GameObject square = Instantiate(squarePrefab, boardParent);
                 square.name = $"Square_{row}_{col}";
@@ -133,8 +140,8 @@ public class EmptyBoardMode : MonoBehaviour
                 if (squareImage == null)
                     squareImage = square.AddComponent<Image>();
 
-                bool isLightSquare = (row + col) % 2 == 0;
-                squareImage.color = isLightSquare ? lightSquareColor : darkSquareColor;
+                bool isLight = (row + col) % 2 == 0;
+                squareImage.color = isLight ? lightSquareColor : darkSquareColor;
 
                 chessSquares[row, col] = squareImage;
 
@@ -142,10 +149,10 @@ public class EmptyBoardMode : MonoBehaviour
                 if (squareButton == null)
                     squareButton = square.AddComponent<Button>();
 
-                int capturedRow = row;
-                int capturedCol = col;
+                int r = row;
+                int c = col;
                 squareButton.onClick.RemoveAllListeners();
-                squareButton.onClick.AddListener(() => OnSquareClicked(capturedRow, capturedCol));
+                squareButton.onClick.AddListener(() => OnSquareClicked(r, c));
 
                 LayoutElement layoutElement = square.GetComponent<LayoutElement>();
                 if (layoutElement == null)
@@ -179,7 +186,6 @@ public class EmptyBoardMode : MonoBehaviour
         if (targetSquareText != null)
             targetSquareText.text = $"{targetSquare}";
 
-        // Fix: Stop previous flash before starting new one
         if (coordinateFlashText != null)
         {
             if (flashRoutine != null)
@@ -201,7 +207,7 @@ public class EmptyBoardMode : MonoBehaviour
         if (isCorrect)
         {
             correctAttempts++;
-            score += 1;
+            score++;
 
             if (chessSquares[row, col] != null)
                 chessSquares[row, col].color = correctColor;
@@ -226,8 +232,8 @@ public class EmptyBoardMode : MonoBehaviour
 
         if (chessSquares[row, col] != null)
         {
-            bool isLightSquare = (row + col) % 2 == 0;
-            chessSquares[row, col].color = isLightSquare ? lightSquareColor : darkSquareColor;
+            bool isLight = (row + col) % 2 == 0;
+            chessSquares[row, col].color = isLight ? lightSquareColor : darkSquareColor;
         }
     }
 
@@ -245,8 +251,8 @@ public class EmptyBoardMode : MonoBehaviour
             {
                 if (chessSquares[row, col] != null)
                 {
-                    bool isLightSquare = (row + col) % 2 == 0;
-                    chessSquares[row, col].color = isLightSquare ? lightSquareColor : darkSquareColor;
+                    bool isLight = (row + col) % 2 == 0;
+                    chessSquares[row, col].color = isLight ? lightSquareColor : darkSquareColor;
                 }
             }
         }
@@ -254,6 +260,12 @@ public class EmptyBoardMode : MonoBehaviour
 
     string GetSquareName(int row, int col)
     {
+        if (!isWhitePerspective)
+        {
+            row = 7 - row;
+            col = 7 - col;
+        }
+
         char file = (char)('A' + col);
         int rank = 8 - row;
         return $"{file}{rank}";
@@ -277,6 +289,13 @@ public class EmptyBoardMode : MonoBehaviour
         {
             chessSquares[row, col].color = color;
         }
+    }
+
+    public void TogglePerspective()
+    {
+        isWhitePerspective = !isWhitePerspective;
+        SetupChessBoard();
+        GenerateNewTarget();
     }
 
     void OnRectTransformDimensionsChange()
@@ -303,7 +322,6 @@ public class EmptyBoardMode : MonoBehaviour
             yield break;
         }
 
-        Debug.Log("Flashing coordinate: " + text);
         coordinateFlashText.text = text;
 
         Color c = coordinateFlashText.color;
