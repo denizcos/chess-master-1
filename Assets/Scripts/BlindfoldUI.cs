@@ -73,7 +73,6 @@ public class BlindfoldUI : MonoBehaviour
     {
         currentRevealCount = maxRevealCount;
         chessBoardObject.SetActive(false);
-        moveLogText.text = "Welcome to Blindfold Chess!\n";
         moveInputField.text = "";
         moveInputField.interactable = false; // Disabled until difficulty is set
 
@@ -751,7 +750,7 @@ public class BlindfoldUI : MonoBehaviour
         // Reset UI state
         currentRevealCount = maxRevealCount;
         moveHistory.Clear();
-        moveLogText.text = "Blindfold mode started! Type your moves (e.g., e4, Nf3)\n";
+        moveLogText.text = "Type your moves (e.g., e4, Nf3)\n";
         moveInputField.text = "";
         moveInputField.interactable = false;
         isDifficultySet = false;
