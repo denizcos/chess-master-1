@@ -2305,6 +2305,7 @@ RectTransform:
   - {fileID: 1383726949}
   - {fileID: 1670405431}
   - {fileID: 332662502}
+  - {fileID: 1465753873}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -4019,6 +4020,107 @@ MonoBehaviour:
   checkSound: {fileID: 8300000, guid: c5f99b38311943642b67a3d4f67f80c1, type: 3}
   correctClip: {fileID: 8300000, guid: c5a951cf48fa4b14c811af8fc8758fc6, type: 3}
   wrongClip: {fileID: 8300000, guid: f7922bba64993c44cb52c093de00f706, type: 3}
+--- !u!1 &1269168164
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1269168167}
+  - component: {fileID: 1269168166}
+  - component: {fileID: 1269168165}
+  m_Layer: 0
+  m_Name: MultiplayerGameObject
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1269168165
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1269168164}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6203fb9f8adefb547a9fb0c83214874d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  serverUrl: ws://localhost:8080
+  reconnectDelay: 3
+  pingInterval: 30
+  maxReconnectAttempts: 5
+--- !u!114 &1269168166
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1269168164}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b59c4225f12f7945a1a98a9a5f7d7cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  mainMenuPanel: {fileID: 0}
+  lobbyListPanel: {fileID: 1465753870}
+  createLobbyPanel: {fileID: 0}
+  lobbyRoomPanel: {fileID: 0}
+  gamePanel: {fileID: 0}
+  lobbyListContent: {fileID: 0}
+  lobbyItemPrefab: {fileID: 0}
+  createLobbyButton: {fileID: 0}
+  refreshButton: {fileID: 0}
+  backToMenuButton: {fileID: 0}
+  searchInput: {fileID: 0}
+  lobbyNameInput: {fileID: 0}
+  hostNameInput: {fileID: 0}
+  privateToggle: {fileID: 0}
+  passwordInput: {fileID: 0}
+  confirmCreateButton: {fileID: 0}
+  cancelCreateButton: {fileID: 0}
+  passwordGroup: {fileID: 0}
+  lobbyNameText: {fileID: 0}
+  lobbyIdText: {fileID: 0}
+  player1NameText: {fileID: 0}
+  player2NameText: {fileID: 0}
+  player1ReadyIndicator: {fileID: 0}
+  player2ReadyIndicator: {fileID: 0}
+  readyButton: {fileID: 0}
+  startGameButton: {fileID: 0}
+  leaveLobbyButton: {fileID: 0}
+  colorSwapButton: {fileID: 0}
+  chatText: {fileID: 0}
+  chatInput: {fileID: 0}
+  sendChatButton: {fileID: 0}
+  passwordPromptPanel: {fileID: 0}
+  joinPasswordInput: {fileID: 0}
+  joinConfirmButton: {fileID: 0}
+  joinCancelButton: {fileID: 0}
+  joinErrorText: {fileID: 0}
+  refreshInterval: 5
+  maxChatMessages: 50
+  readyColor: {r: 0, g: 1, b: 0, a: 1}
+  notReadyColor: {r: 1, g: 0, b: 0, a: 1}
+--- !u!4 &1269168167
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1269168164}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 494.95547, y: 257.93475, z: -1.1628023}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1383726948
 GameObject:
   m_ObjectHideFlags: 0
@@ -4100,6 +4202,81 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1383726948}
   m_CullTransparentMesh: 1
+--- !u!1 &1465753870
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1465753873}
+  - component: {fileID: 1465753872}
+  - component: {fileID: 1465753871}
+  m_Layer: 5
+  m_Name: MultiplayerPanel
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1465753871
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1465753870}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 0.392}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 10907, guid: 0000000000000000f000000000000000, type: 0}
+  m_Type: 1
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &1465753872
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1465753870}
+  m_CullTransparentMesh: 1
+--- !u!224 &1465753873
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1465753870}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 497404515}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &1523223012
 GameObject:
   m_ObjectHideFlags: 0
@@ -5787,3 +5964,4 @@ SceneRoots:
   - {fileID: 1523223014}
   - {fileID: 326256862}
   - {fileID: 1261774008}
+  - {fileID: 1269168167}
