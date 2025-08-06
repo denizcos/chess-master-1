@@ -51,7 +51,6 @@ public class BlindfoldUI : MonoBehaviour
         if (chessAI != null)
         {
             chessAI.OnAIMoveReady += OnAIMoveReceived;
-            chessAI.OnAIThinking += ShowThinkingMessage;
             chessAI.OnEngineStatus += ShowEngineStatus;
             chessAI.OnEngineError += ShowErrorMessage;
         }
@@ -73,14 +72,15 @@ public class BlindfoldUI : MonoBehaviour
     {
         currentRevealCount = maxRevealCount;
         chessBoardObject.SetActive(false);
-        moveInputField.text = "";
+    //  moveInputField.text = "Choose difficulty. \n";
         moveInputField.interactable = false; // Disabled until difficulty is set
 
         if (errorMessageText != null)
-        {
-            errorMessageText.text = "";
-            errorMessageText.gameObject.SetActive(false);
-        }
+    {
+        // Prompt the player to choose a difficulty in the same UI area
+        ShowErrorMessage("Choose difficulty.");
+    }
+
 
         // Show difficulty prompt
         if (difficultyPromptObject != null)
@@ -111,13 +111,6 @@ public class BlindfoldUI : MonoBehaviour
         }
 
         // AI events
-        if (chessAI != null)
-        {
-            chessAI.OnAIMoveReady += OnAIMoveReceived;
-            chessAI.OnAIThinking += ShowThinkingMessage;
-            chessAI.OnEngineStatus += ShowEngineStatus;
-            chessAI.OnEngineError += ShowErrorMessage;
-        }
     }
 
     #region Input Handling
@@ -137,92 +130,106 @@ public class BlindfoldUI : MonoBehaviour
         }
     }
 
-    void ProcessPlayerMove(string playerMove)
+   void ProcessPlayerMove(string playerMove)
+{
+    if (string.IsNullOrWhiteSpace(playerMove))
     {
-        if (string.IsNullOrWhiteSpace(playerMove))
-        {
-            RefocusInputField();
-            return;
-        }
+        RefocusInputField();
+        return;
+    }
 
-        if (!isDifficultySet)
-        {
-            ShowErrorMessage("Please select a difficulty level first!");
-            moveInputField.text = "";
-            RefocusInputField();
-            return;
-        }
+    if (!isDifficultySet)
+    {
+        ShowErrorMessage("Please select a difficulty level first!");
+        moveInputField.text = "";
+        RefocusInputField();
+        return;
+    }
 
-        if (!chessAI.IsReady())
-        {
-            ShowErrorMessage("Chess engine is still loading. Please wait...");
-            moveInputField.text = "";
-            RefocusInputField();
-            return;
-        }
+    if (!chessAI.IsReady())
+    {
+        ShowErrorMessage("Chess engine is still loading. Please wait...");
+        moveInputField.text = "";
+        RefocusInputField();
+        return;
+    }
 
-        playerMove = playerMove.Trim();
-        ChessRules.PieceColor currentColor = chessRules.GetCurrentPlayerColor();
+    playerMove = playerMove.Trim();
+    ChessRules.PieceColor currentColor = chessRules.GetCurrentPlayerColor();
 
-        // Check for castling
-        string upperMove = playerMove.ToUpper();
-        if (upperMove == "O-O" || upperMove == "0-0")
+    // --- Castling handling (unchanged) ---
+    string upperMove = playerMove.ToUpper();
+    if (upperMove == "O-O" || upperMove == "0-0")
+    {
+        if (chessRules.CanCastle(currentColor, true))
         {
-            if (chessRules.CanCastle(currentColor, true))
-            {
-                chessRules.ExecuteCastling(currentColor, true);
-                AddMoveToLog("O-O");
-                chessRules.NextTurn();
-                CheckGameStateAndContinue();
-            }
-            else
-            {
-                ShowErrorMessage("Kingside castling is not legal!");
-            }
-            ClearInputAndRefocus();
-            return;
-        }
-
-        if (upperMove == "O-O-O" || upperMove == "0-0-0")
-        {
-            if (chessRules.CanCastle(currentColor, false))
-            {
-                chessRules.ExecuteCastling(currentColor, false);
-                AddMoveToLog("O-O-O");
-                chessRules.NextTurn();
-                CheckGameStateAndContinue();
-            }
-            else
-            {
-                ShowErrorMessage("Queenside castling is not legal!");
-            }
-            ClearInputAndRefocus();
-            return;
-        }
-
-        // Parse regular moves
-        if (TryParseMove(playerMove, currentColor, out int fromRow, out int fromCol, out int toRow, out int toCol))
-        {
-            if (chessRules.IsValidMove(fromRow, fromCol, toRow, toCol, currentColor))
-            {
-                chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
-                string moveNotation = FormatMoveNotation(playerMove);
-                AddMoveToLog(moveNotation);
-                chessRules.NextTurn();
-                CheckGameStateAndContinue();
-            }
-            else
-            {
-                ShowErrorMessage($"Invalid move: {playerMove}");
-            }
+            chessRules.ExecuteCastling(currentColor, true);
+            AddMoveToLog("O-O");
+            chessRules.NextTurn();
+            CheckGameStateAndContinue();
         }
         else
         {
-            ShowErrorMessage($"Invalid move notation: {playerMove}");
+            ShowErrorMessage("Kingside castling is not legal!");
         }
-
         ClearInputAndRefocus();
+        return;
     }
+
+    if (upperMove == "O-O-O" || upperMove == "0-0-0")
+    {
+        if (chessRules.CanCastle(currentColor, false))
+        {
+            chessRules.ExecuteCastling(currentColor, false);
+            AddMoveToLog("O-O-O");
+            chessRules.NextTurn();
+            CheckGameStateAndContinue();
+        }
+        else
+        {
+            ShowErrorMessage("Queenside castling is not legal!");
+        }
+        ClearInputAndRefocus();
+        return;
+    }
+
+    // --- Regular moves ---
+    if (TryParseMove(playerMove, currentColor, out int fromRow, out int fromCol, out int toRow, out int toCol))
+    {
+        if (chessRules.IsValidMove(fromRow, fromCol, toRow, toCol, currentColor))
+        {
+            // 1) Capture state before moving
+            var piece = chessRules.GetPiece(fromRow, fromCol);
+            bool wasCapture = chessRules.GetPiece(toRow, toCol) != null;
+
+            // 2) Execute the move once
+            chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
+
+            // 3) Generate standardized notation
+            string moveNotation = GenerateAlgebraicNotation(
+                piece.type,
+                fromRow, fromCol,
+                toRow,   toCol,
+                wasCapture
+            );
+
+            AddMoveToLog(moveNotation);
+            chessRules.NextTurn();
+            CheckGameStateAndContinue();
+        }
+        else
+        {
+            ShowErrorMessage($"Invalid move: {playerMove}");
+        }
+    }
+    else
+    {
+        ShowErrorMessage($"Invalid move notation: {playerMove}");
+    }
+
+    ClearInputAndRefocus();
+}
+
 
     void CheckGameStateAndContinue()
     {
@@ -430,34 +437,43 @@ public class BlindfoldUI : MonoBehaviour
         return false;
     }
 
-    string FormatMoveNotation(string originalNotation)
-    {
-        return originalNotation; // For now, just return original
-    }
 
     #endregion
 
     #region AI Handling
 
     void OnAIMoveReceived(string aiMove)
-    {
-        if (aiMove.Length < 4) return;
+{
+    // aiMove is like "d7e6" or "e2e4"
+    if (aiMove.Length < 4) return;
 
-        int fromCol = aiMove[0] - 'a';
-        int fromRow = 8 - (aiMove[1] - '0');
-        int toCol = aiMove[2] - 'a';
-        int toRow = 8 - (aiMove[3] - '0');
+    // 1) Parse coordinates
+    int fromCol = aiMove[0] - 'a';
+    int fromRow = 8 - (aiMove[1] - '0');
+    int toCol   = aiMove[2] - 'a';
+    int toRow   = 8 - (aiMove[3] - '0');
 
-        // Execute AI move
-        chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
+    // 2) Capture state before moving
+    var piece     = chessRules.GetPiece(fromRow, fromCol);
+    bool wasCapture = chessRules.GetPiece(toRow, toCol) != null;
 
-        // Convert to proper notation and add to log
-        string moveNotation = ConvertToAlgebraic(fromRow, fromCol, toRow, toCol);
-        AddMoveToLog(moveNotation);
+    // 3) Execute the move exactly once
+    chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
 
-        chessRules.NextTurn();
-        CheckGameStateAndContinue();
-    }
+    // 4) Generate standardized notation
+    string moveNotation = GenerateAlgebraicNotation(
+        piece.type,
+        fromRow, fromCol,
+        toRow,   toCol,
+        wasCapture
+    );
+
+    // 5) Log it, advance turn
+    AddMoveToLog(moveNotation);
+    chessRules.NextTurn();
+    CheckGameStateAndContinue();
+}
+
 
     string ConvertToAlgebraic(int fromRow, int fromCol, int toRow, int toCol)
     {
@@ -528,7 +544,7 @@ public class BlindfoldUI : MonoBehaviour
         string[] difficulties = { "Easy", "Medium", "Hard" };
         string difficultyName = value < difficulties.Length ? difficulties[value] : "Easy";
 
-        ShowErrorMessage($"Difficulty set to {difficultyName}. Game ready! Make your first move.");
+        ShowErrorMessage($"Difficulty set to {difficultyName}.");
         StartCoroutine(FocusInputField());
     }
 
@@ -920,6 +936,41 @@ public class BlindfoldUI : MonoBehaviour
         UnityEngine.Debug.Log($"Black Rook: {(blackRookSprite != null ? blackRookSprite.name : "NULL")}");
         UnityEngine.Debug.Log($"Black Queen: {(blackQueenSprite != null ? blackQueenSprite.name : "NULL")}");
         UnityEngine.Debug.Log($"Black King: {(blackKingSprite != null ? blackKingSprite.name : "NULL")}");
+    }
+    private string GenerateAlgebraicNotation(
+        ChessRules.PieceType type,
+        int fromRow, int fromCol,
+        int toRow,   int toCol,
+        bool wasCapture)
+    {
+        // File/rank of origin and destination
+        char fromFile = (char)('a' + fromCol);
+        char toFile   = (char)('a' + toCol);
+        int  toRank   = 8 - toRow;
+
+        // Handle pawns specially
+        if (type == ChessRules.PieceType.Pawn)
+        {
+            if (wasCapture)
+                return $"{fromFile}x{toFile}{toRank}";
+            else
+                return $"{toFile}{toRank}";
+        }
+
+        // Map piece types to symbols
+        string symbol = type switch {
+            ChessRules.PieceType.Knight => "N",
+            ChessRules.PieceType.Bishop => "B",
+            ChessRules.PieceType.Rook   => "R",
+            ChessRules.PieceType.Queen  => "Q",
+            ChessRules.PieceType.King   => "K",
+            _ => ""
+        };
+
+        // Quiet move vs capture
+        string captureMark = wasCapture ? "x" : "";
+
+        return $"{symbol}{captureMark}{toFile}{toRank}";
     }
 
     #endregion
