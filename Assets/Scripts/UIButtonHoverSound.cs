@@ -4,11 +4,11 @@ using UnityEngine.EventSystems;
 /// <summary>
 /// Centralized sound manager for UI and game events.
 /// Handles hover, click, reveal, capture, check, checkmate, stalemate, and answer sounds.
-/// Attach to a persistent GameObject in your scene and assign the audio clips in the Inspector.
+/// Attach to a persistent GameObject and assign the clips in the Inspector.
 /// </summary>
-public class UISoundManager : MonoBehaviour, IPointerEnterHandler, IPointerClickHandler
+public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerClickHandler
 {
-    public static UISoundManager Instance { get; private set; }
+    public static UIButtonHoverSound Instance { get; private set; }
 
     [Header("Audio Source")]
     public AudioSource audioSource;
@@ -16,17 +16,22 @@ public class UISoundManager : MonoBehaviour, IPointerEnterHandler, IPointerClick
     [Header("UI Sounds")]
     public AudioClip hoverClip;
     public AudioClip clickClip;
+    public AudioClip switchClip;
 
     [Header("Game Sounds")]
     public AudioClip revealClip;
+    public AudioClip revealEndClip; 
     public AudioClip captureClip;
     public AudioClip checkClip;
     public AudioClip checkmateClip;
     public AudioClip stalemateClip;
 
+
     [Header("Answer Sounds")]
     public AudioClip correctClip;
     public AudioClip wrongClip;
+
+    public AudioClip[] moveClips;
 
     void Awake()
     {
@@ -39,78 +44,101 @@ public class UISoundManager : MonoBehaviour, IPointerEnterHandler, IPointerClick
         DontDestroyOnLoad(gameObject);
     }
 
-    // IPointerEnterHandler implementation for UI hover
-    public void OnPointerEnter(PointerEventData eventData)
+
+    public void PlayRandomMove()
     {
-        PlayHover();
+        if (audioSource == null || moveClips == null || moveClips.Length == 0) 
+            return;
+
+        int idx = Random.Range(0, moveClips.Length);
+        var clip = moveClips[idx];
+        if (clip != null)
+            audioSource.PlayOneShot(clip);
     }
 
-    // IPointerClickHandler implementation for UI click
-    public void OnPointerClick(PointerEventData eventData)
-    {
-        PlayClick();
-    }
+    // UI hover
+    public void OnPointerEnter(PointerEventData eventData) => PlayHover();
+    // UI click
+    public void OnPointerClick(PointerEventData eventData) => PlayClick();
 
-    // Play UI hover sound
     public void PlayHover()
     {
         if (audioSource != null && hoverClip != null)
             audioSource.PlayOneShot(hoverClip);
     }
 
-    // Play UI click sound
     public void PlayClick()
     {
         if (audioSource != null && clickClip != null)
             audioSource.PlayOneShot(clickClip);
     }
 
-    // Play reveal-board sound
     public void PlayReveal()
     {
         if (audioSource != null && revealClip != null)
             audioSource.PlayOneShot(revealClip);
     }
+    public void PlayRevealEnd()
+    {
+        if (audioSource != null && revealEndClip != null)
+            audioSource.PlayOneShot(revealEndClip);
+    }
 
-    // Play piece capture sound
     public void PlayCapture()
     {
         if (audioSource != null && captureClip != null)
             audioSource.PlayOneShot(captureClip);
     }
 
-    // Play check sound
     public void PlayCheck()
     {
         if (audioSource != null && checkClip != null)
             audioSource.PlayOneShot(checkClip);
     }
 
-    // Play checkmate sound
+    
+
     public void PlayCheckmate()
     {
         if (audioSource != null && checkmateClip != null)
             audioSource.PlayOneShot(checkmateClip);
     }
 
-    // Play stalemate sound
     public void PlayStalemate()
     {
         if (audioSource != null && stalemateClip != null)
             audioSource.PlayOneShot(stalemateClip);
     }
 
-    // Play correct answer sound (retained)
     public void PlayCorrect()
     {
         if (audioSource != null && correctClip != null)
             audioSource.PlayOneShot(correctClip);
     }
 
-    // Play wrong answer sound (retained)
     public void PlayWrong()
     {
         if (audioSource != null && wrongClip != null)
             audioSource.PlayOneShot(wrongClip);
     }
+    public void PlaySwitch()
+    {
+        if (audioSource != null && switchClip != null)
+            audioSource.PlayOneShot(switchClip);
+    }
+
+
+    // Alias methods for existing calls
+    public void PlayCorrectSound()
+    {
+        PlayCorrect();
+    }
+
+    public void PlayWrongSound()
+    {
+        PlayWrong();
+    }
+
+
+
 }

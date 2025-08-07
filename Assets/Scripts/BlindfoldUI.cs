@@ -204,6 +204,7 @@ public class BlindfoldUI : MonoBehaviour
 
             // 2) Execute the move once
             chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
+            UIButtonHoverSound.Instance.PlayRandomMove();
 
             // 3) Generate standardized notation
             string moveNotation = GenerateAlgebraicNotation(
@@ -459,6 +460,7 @@ public class BlindfoldUI : MonoBehaviour
 
     // 3) Execute the move exactly once
     chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
+    UIButtonHoverSound.Instance.PlayRandomMove();
 
     // 4) Generate standardized notation
     string moveNotation = GenerateAlgebraicNotation(
@@ -548,15 +550,21 @@ public class BlindfoldUI : MonoBehaviour
         StartCoroutine(FocusInputField());
     }
 
-    void OnRevealBoardClicked()
+    public void OnRevealBoardClicked()
+{
+    if (currentRevealCount > 0)
     {
-        if (currentRevealCount > 0)
-        {
-            currentRevealCount--;
-            StartCoroutine(RevealBoardTemporarily());
-            UpdateRevealButtonText();
-        }
+        currentRevealCount--;
+        UIButtonHoverSound.Instance.PlayReveal();       // start sound
+        StartCoroutine(RevealBoardTemporarily());
+        UpdateRevealButtonText();
     }
+    else
+    {
+        ShowErrorMessage("No reveals left!");
+        // (UpdateRevealButtonText will disable the button)
+    }
+}
 
     #endregion
 
@@ -570,7 +578,10 @@ public class BlindfoldUI : MonoBehaviour
         yield return new WaitForSeconds(revealDuration);
 
         chessBoardObject.SetActive(false);
+
+        UIButtonHoverSound.Instance.PlayRevealEnd();    // end of reveal SFX
     }
+
 
     void SpawnAllPieces()
     {
@@ -824,7 +835,7 @@ public class BlindfoldUI : MonoBehaviour
 
     #region Utility Methods
 
-    void UpdateRevealButtonText()
+  /**   void UpdateRevealButtonText()
     {
         if (revealBoardButton != null)
         {
@@ -840,7 +851,21 @@ public class BlindfoldUI : MonoBehaviour
                 }
             }
         }
+    } */  
+    void UpdateRevealButtonText()
+{
+    var txt = revealBoardButton.GetComponentInChildren<TMP_Text>();
+    if (currentRevealCount > 0)
+    {
+        txt.text = $"Reveal Board ({currentRevealCount} left)";
+        revealBoardButton.interactable = true;
     }
+    else
+    {
+        txt.text = "No Reveals Left";
+        revealBoardButton.interactable = false;
+    }
+}
 
     void ShowErrorMessage(string message)
     {

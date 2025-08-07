@@ -20,9 +20,9 @@ public class EmptyBoardMode : MonoBehaviour
 
     [Header("Colors")]
     public Color lightSquareColor = Color.white;
-    public Color darkSquareColor = new Color(0.7f, 0.7f, 0.7f);
-    public Color correctColor = Color.green;
-    public Color incorrectColor = Color.red;
+    public Color darkSquareColor  = new Color(0.7f, 0.7f, 0.7f);
+    public Color correctColor     = Color.green;
+    public Color incorrectColor   = Color.red;
 
     [Header("Game Settings")]
     public float feedbackDuration = 1f;
@@ -33,12 +33,12 @@ public class EmptyBoardMode : MonoBehaviour
     private Image[,] chessSquares = new Image[8, 8];
     private GridLayoutGroup gridLayout;
 
-    private int currentTargetRow;
-    private int currentTargetCol;
-    private int score = 0;
-    private int totalAttempts = 0;
-    private int correctAttempts = 0;
+    private int score, totalAttempts, correctAttempts;
     private bool gameStarted = false;
+
+    // logical target: file 0–7 for a–h, rank 1–8
+    private int targetFile;
+    private int targetRank;
 
     private Coroutine flashRoutine;
 
@@ -48,10 +48,8 @@ public class EmptyBoardMode : MonoBehaviour
         SetupChessBoard();
         AutoResizeBoard();
 
+        score = totalAttempts = correctAttempts = 0;
         gameStarted = true;
-        score = 0;
-        totalAttempts = 0;
-        correctAttempts = 0;
 
         UpdateUI();
         GenerateNewTarget();
@@ -64,33 +62,18 @@ public class EmptyBoardMode : MonoBehaviour
             scoreText.text = "Score: 0";
     }
 
-    void AutoResizeBoard()
-    {
-        if (boardParent == null) return;
-
-        float availableWidth = boardParent.rect.width - 20f;
-        float availableHeight = boardParent.rect.height - 20f;
-        float availableSize = Mathf.Min(availableWidth, availableHeight);
-        float calculatedSquareSize = (availableSize - (boardSpacing * 7)) / 8f;
-        squareSize = Mathf.Clamp(calculatedSquareSize, 60f, 100f);
-
-        ResizeBoard();
-    }
-
     void SetupChessBoard()
     {
         if (boardParent == null || squarePrefab == null)
         {
-            Debug.LogError("Board Parent or Square Prefab is not assigned!");
+            Debug.LogError("Board Parent or Square Prefab not assigned!");
             return;
         }
 
+        // get or add GridLayoutGroup
         gridLayout = boardParent.GetComponent<GridLayoutGroup>();
         if (gridLayout == null)
-        {
-            Debug.LogError("ChessBoardPanel must have a Grid Layout Group component!");
-            return;
-        }
+            gridLayout = boardParent.gameObject.AddComponent<GridLayoutGroup>();
 
         ConfigureGridLayout();
         ClearBoard();
@@ -100,127 +83,114 @@ public class EmptyBoardMode : MonoBehaviour
 
     void ConfigureGridLayout()
     {
-        gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        gridLayout.constraint      = GridLayoutGroup.Constraint.FixedColumnCount;
         gridLayout.constraintCount = 8;
-        gridLayout.spacing = new Vector2(boardSpacing, boardSpacing);
-        gridLayout.childAlignment = TextAnchor.MiddleCenter;
-        gridLayout.cellSize = new Vector2(squareSize, squareSize);
-        gridLayout.startCorner = GridLayoutGroup.Corner.UpperLeft;
-        gridLayout.startAxis = GridLayoutGroup.Axis.Horizontal;
+        gridLayout.spacing         = new Vector2(boardSpacing, boardSpacing);
+        gridLayout.childAlignment  = TextAnchor.MiddleCenter;
+        gridLayout.cellSize        = new Vector2(squareSize, squareSize);
+        gridLayout.startCorner     = GridLayoutGroup.Corner.UpperLeft;
+        gridLayout.startAxis       = GridLayoutGroup.Axis.Horizontal;
     }
 
     void ClearBoard()
     {
         for (int i = boardParent.childCount - 1; i >= 0; i--)
-        {
-            Destroy(boardParent.GetChild(i).gameObject);
-        }
-
-        chessSquares = new Image[8, 8];
+            DestroyImmediate(boardParent.GetChild(i).gameObject);
     }
 
     void CreateChessSquares()
     {
         int rowStart = isWhitePerspective ? 0 : 7;
-        int rowEnd = isWhitePerspective ? 8 : -1;
-        int rowStep = isWhitePerspective ? 1 : -1;
+        int rowEnd   = isWhitePerspective ? 8 : -1;
+        int rowStep  = isWhitePerspective ? 1 : -1;
 
         int colStart = isWhitePerspective ? 0 : 7;
-        int colEnd = isWhitePerspective ? 8 : -1;
-        int colStep = isWhitePerspective ? 1 : -1;
+        int colEnd   = isWhitePerspective ? 8 : -1;
+        int colStep  = isWhitePerspective ? 1 : -1;
 
         for (int row = rowStart; row != rowEnd; row += rowStep)
         {
             for (int col = colStart; col != colEnd; col += colStep)
             {
-                GameObject square = Instantiate(squarePrefab, boardParent);
-                square.name = $"Square_{row}_{col}";
+                GameObject sq = Instantiate(squarePrefab, boardParent);
+                sq.name = "Square_" + row + "_" + col;
 
-                Image squareImage = square.GetComponent<Image>();
-                if (squareImage == null)
-                    squareImage = square.AddComponent<Image>();
+                Image img = sq.GetComponent<Image>() ?? sq.AddComponent<Image>();
+                bool isLight = ((row + col) % 2 == 0);
+                img.color = isLight ? lightSquareColor : darkSquareColor;
+                chessSquares[row, col] = img;
 
-                bool isLight = (row + col) % 2 == 0;
-                squareImage.color = isLight ? lightSquareColor : darkSquareColor;
+                Button btn = sq.GetComponent<Button>() ?? sq.AddComponent<Button>();
+                int r = row, c = col;
+                btn.onClick.RemoveAllListeners();
+                btn.onClick.AddListener(() => OnSquareClicked(r, c));
 
-                chessSquares[row, col] = squareImage;
-
-                Button squareButton = square.GetComponent<Button>();
-                if (squareButton == null)
-                    squareButton = square.AddComponent<Button>();
-
-                int r = row;
-                int c = col;
-                squareButton.onClick.RemoveAllListeners();
-                squareButton.onClick.AddListener(() => OnSquareClicked(r, c));
-
-                LayoutElement layoutElement = square.GetComponent<LayoutElement>();
-                if (layoutElement == null)
-                    layoutElement = square.AddComponent<LayoutElement>();
+                if (sq.GetComponent<LayoutElement>() == null)
+                    sq.AddComponent<LayoutElement>();
             }
         }
+    }
+
+    void AutoResizeBoard()
+    {
+        if (boardParent == null) return;
+        float availW = boardParent.rect.width  - 20f;
+        float availH = boardParent.rect.height - 20f;
+        float avail  = Mathf.Min(availW, availH);
+        squareSize   = Mathf.Clamp((avail - boardSpacing * 7f) / 8f, 60f, 100f);
+        ResizeBoard();
     }
 
     void ResizeBoard()
     {
         if (gridLayout == null) return;
-
         gridLayout.cellSize = new Vector2(squareSize, squareSize);
-        gridLayout.spacing = new Vector2(boardSpacing, boardSpacing);
-
-        float totalBoardSize = (squareSize * 8) + (boardSpacing * 7);
-        if (boardParent != null)
-        {
-            boardParent.sizeDelta = new Vector2(totalBoardSize, totalBoardSize);
-        }
+        gridLayout.spacing  = new Vector2(boardSpacing, boardSpacing);
+        float total = squareSize * 8f + boardSpacing * 7f;
+        boardParent.sizeDelta = new Vector2(total, total);
     }
 
     void GenerateNewTarget()
     {
-        if (!gameStarted) return;
+        targetFile = Random.Range(0, 8);
+        targetRank = Random.Range(1, 9);
 
-        currentTargetRow = UnityEngine.Random.Range(0, 8);
-        currentTargetCol = UnityEngine.Random.Range(0, 8);
-        string targetSquare = GetSquareName(currentTargetRow, currentTargetCol).ToLower();
-
+        string coord = ((char)('a' + targetFile)).ToString() + targetRank;
         if (targetSquareText != null)
-            targetSquareText.text = $"{targetSquare}";
+            targetSquareText.text = coord;
 
         if (coordinateFlashText != null)
         {
             if (flashRoutine != null)
                 StopCoroutine(flashRoutine);
-
-            flashRoutine = StartCoroutine(FlashCoordinate(targetSquare));
+            flashRoutine = StartCoroutine(FlashCoordinate(coord));
         }
     }
 
     void OnSquareClicked(int row, int col)
     {
         if (!gameStarted) return;
-
         totalAttempts++;
 
-        bool isCorrect = (row == currentTargetRow && col == currentTargetCol);
-        Debug.Log($"Clicked: {GetSquareName(row, col)} - Target: {GetSquareName(currentTargetRow, currentTargetCol)} - {(isCorrect ? "CORRECT" : "WRONG")}");
+        // simple mapping: file = col, rank = 8 - row
+        int file = col;
+        int rank = 8 - row;
 
-        if (isCorrect)
+        bool correct = (file == targetFile && rank == targetRank);
+        var img = chessSquares[row, col];
+
+        if (correct)
         {
             correctAttempts++;
             score++;
-
-            if (chessSquares[row, col] != null)
-                chessSquares[row, col].color = correctColor;
-
+            img.color = correctColor;
             StartCoroutine(ResetSquareColor(row, col, feedbackDuration));
             UpdateUI();
             GenerateNewTarget();
         }
         else
         {
-            if (chessSquares[row, col] != null)
-                chessSquares[row, col].color = incorrectColor;
-
+            img.color = incorrectColor;
             StartCoroutine(ResetSquareColor(row, col, feedbackDuration));
             UpdateUI();
         }
@@ -229,66 +199,26 @@ public class EmptyBoardMode : MonoBehaviour
     IEnumerator ResetSquareColor(int row, int col, float delay)
     {
         yield return new WaitForSeconds(delay);
-
-        if (chessSquares[row, col] != null)
-        {
-            bool isLight = (row + col) % 2 == 0;
-            chessSquares[row, col].color = isLight ? lightSquareColor : darkSquareColor;
-        }
+        var img = chessSquares[row, col];
+        bool isLight = ((row + col) % 2 == 0);
+        img.color = isLight ? lightSquareColor : darkSquareColor;
     }
 
     void UpdateUI()
     {
         if (scoreText != null)
-            scoreText.text = $"{score}";
+            scoreText.text = score.ToString();
     }
 
     void ResetBoardColors()
     {
-        for (int row = 0; row < 8; row++)
-        {
-            for (int col = 0; col < 8; col++)
+        for (int r = 0; r < 8; r++)
+            for (int c = 0; c < 8; c++)
             {
-                if (chessSquares[row, col] != null)
-                {
-                    bool isLight = (row + col) % 2 == 0;
-                    chessSquares[row, col].color = isLight ? lightSquareColor : darkSquareColor;
-                }
+                var img = chessSquares[r, c];
+                bool isLight = ((r + c) % 2 == 0);
+                img.color = isLight ? lightSquareColor : darkSquareColor;
             }
-        }
-    }
-
-    string GetSquareName(int row, int col)
-    {
-        if (!isWhitePerspective)
-        {
-            row = 7 - row;
-            col = 7 - col;
-        }
-
-        char file = (char)('A' + col);
-        int rank = 8 - row;
-        return $"{file}{rank}";
-    }
-
-    public void SetSquareSize(float newSize)
-    {
-        squareSize = newSize;
-        ResizeBoard();
-    }
-
-    public void SetBoardSpacing(float newSpacing)
-    {
-        boardSpacing = newSpacing;
-        ResizeBoard();
-    }
-
-    public void HighlightSquare(int row, int col, Color color)
-    {
-        if (row >= 0 && row < 8 && col >= 0 && col < 8 && chessSquares[row, col] != null)
-        {
-            chessSquares[row, col].color = color;
-        }
     }
 
     public void TogglePerspective()
@@ -301,29 +231,21 @@ public class EmptyBoardMode : MonoBehaviour
     void OnRectTransformDimensionsChange()
     {
         if (gridLayout != null)
-        {
-            Invoke(nameof(AutoResizeBoard), 0.1f);
-        }
+            Invoke("AutoResizeBoard", 0.1f);
     }
 
     void OnValidate()
     {
         if (Application.isPlaying && gridLayout != null)
-        {
             ResizeBoard();
-        }
     }
 
     IEnumerator FlashCoordinate(string text)
     {
         if (coordinateFlashText == null)
-        {
-            Debug.LogWarning("coordinateFlashText is not assigned!");
             yield break;
-        }
 
         coordinateFlashText.text = text;
-
         Color c = coordinateFlashText.color;
         c.a = 0.7f;
         coordinateFlashText.color = c;

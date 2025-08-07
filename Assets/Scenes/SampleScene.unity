@@ -520,6 +520,11 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 74006431}
   m_CullTransparentMesh: 1
+--- !u!1 &75563152 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 3397626190246943720, guid: 6ba7e76d764c19949b10c2a69edd391a, type: 3}
+  m_PrefabInstance: {fileID: 285394676}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &105795585
 GameObject:
   m_ObjectHideFlags: 0
@@ -992,6 +997,7 @@ GameObject:
   - component: {fileID: 119060914}
   - component: {fileID: 119060913}
   - component: {fileID: 119060912}
+  - component: {fileID: 119060915}
   m_Layer: 5
   m_Name: RevealBoardButton
   m_TagString: Untagged
@@ -1101,6 +1107,35 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 119060910}
   m_CullTransparentMesh: 1
+--- !u!114 &119060915
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 119060910}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0b148fe25e99eb48b9724523833bab1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Delegates:
+  - eventID: 4
+    callback:
+      m_PersistentCalls:
+        m_Calls:
+        - m_Target: {fileID: 1261774009}
+          m_TargetAssemblyTypeName: UIButtonHoverSound, Assembly-CSharp
+          m_MethodName: PlayReveal
+          m_Mode: 1
+          m_Arguments:
+            m_ObjectArgument: {fileID: 0}
+            m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+            m_IntArgument: 0
+            m_FloatArgument: 0
+            m_StringArgument: 
+            m_BoolArgument: 0
+          m_CallState: 2
 --- !u!1 &137571209
 GameObject:
   m_ObjectHideFlags: 0
@@ -1605,6 +1640,7 @@ GameObject:
   - component: {fileID: 233770061}
   - component: {fileID: 233770060}
   - component: {fileID: 233770063}
+  - component: {fileID: 233770064}
   m_Layer: 5
   m_Name: ModeSection
   m_TagString: Untagged
@@ -1631,7 +1667,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -785.17, y: 161}
+  m_AnchoredPosition: {x: -841.29, y: 162}
   m_SizeDelta: {x: 251.47, y: 85.5345}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &233770060
@@ -1748,6 +1784,51 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b4126d049a379014a9e2bf7a12be83b1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!114 &233770064
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 233770058}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0b148fe25e99eb48b9724523833bab1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Delegates:
+  - eventID: 0
+    callback:
+      m_PersistentCalls:
+        m_Calls:
+        - m_Target: {fileID: 1261774009}
+          m_TargetAssemblyTypeName: UIButtonHoverSound, Assembly-CSharp
+          m_MethodName: PlayHover
+          m_Mode: 1
+          m_Arguments:
+            m_ObjectArgument: {fileID: 0}
+            m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+            m_IntArgument: 0
+            m_FloatArgument: 0
+            m_StringArgument: 
+            m_BoolArgument: 0
+          m_CallState: 2
+  - eventID: 4
+    callback:
+      m_PersistentCalls:
+        m_Calls:
+        - m_Target: {fileID: 1261774009}
+          m_TargetAssemblyTypeName: UIButtonHoverSound, Assembly-CSharp
+          m_MethodName: PlayClick
+          m_Mode: 1
+          m_Arguments:
+            m_ObjectArgument: {fileID: 0}
+            m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+            m_IntArgument: 0
+            m_FloatArgument: 0
+            m_StringArgument: 
+            m_BoolArgument: 0
+          m_CallState: 2
 --- !u!1 &251384381
 GameObject:
   m_ObjectHideFlags: 0
@@ -2108,35 +2189,108 @@ PrefabInstance:
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 6714448362961329786, guid: 6ba7e76d764c19949b10c2a69edd391a, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[1].m_Mode
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6714448362961329786, guid: 6ba7e76d764c19949b10c2a69edd391a, type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Target
       value: 
-      objectReference: {fileID: 1004590531}
+      objectReference: {fileID: 1004590533}
+    - target: {fileID: 6714448362961329786, guid: 6ba7e76d764c19949b10c2a69edd391a, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[1].m_Target
+      value: 
+      objectReference: {fileID: 0}
+    - target: {fileID: 6714448362961329786, guid: 6ba7e76d764c19949b10c2a69edd391a, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[1].m_CallState
+      value: 2
+      objectReference: {fileID: 0}
     - target: {fileID: 6714448362961329786, guid: 6ba7e76d764c19949b10c2a69edd391a, type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_MethodName
       value: OnSaveLogClicked
       objectReference: {fileID: 0}
     - target: {fileID: 6714448362961329786, guid: 6ba7e76d764c19949b10c2a69edd391a, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[1].m_MethodName
+      value: 
+      objectReference: {fileID: 0}
+    - target: {fileID: 6714448362961329786, guid: 6ba7e76d764c19949b10c2a69edd391a, type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_TargetAssemblyTypeName
+      value: BlindfoldUI, Assembly-CSharp
+      objectReference: {fileID: 0}
+    - target: {fileID: 6714448362961329786, guid: 6ba7e76d764c19949b10c2a69edd391a, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[1].m_TargetAssemblyTypeName
       value: BlindfoldModeManager, Assembly-CSharp
       objectReference: {fileID: 0}
     - target: {fileID: 6714448362961329786, guid: 6ba7e76d764c19949b10c2a69edd391a, type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Arguments.m_ObjectArgumentAssemblyTypeName
       value: UnityEngine.Object, UnityEngine
       objectReference: {fileID: 0}
+    - target: {fileID: 6714448362961329786, guid: 6ba7e76d764c19949b10c2a69edd391a, type: 3}
+      propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[1].m_Arguments.m_ObjectArgumentAssemblyTypeName
+      value: 
+      objectReference: {fileID: 0}
     - target: {fileID: 8875531924058384408, guid: 6ba7e76d764c19949b10c2a69edd391a, type: 3}
       propertyPath: m_text
       value: Save the  Log
       objectReference: {fileID: 0}
-    m_RemovedComponents: []
+    m_RemovedComponents:
+    - {fileID: 1926664868325721341, guid: 6ba7e76d764c19949b10c2a69edd391a, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 3397626190246943720, guid: 6ba7e76d764c19949b10c2a69edd391a, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 285394682}
   m_SourcePrefab: {fileID: 100100000, guid: 6ba7e76d764c19949b10c2a69edd391a, type: 3}
 --- !u!224 &285394677 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 5540542754283605646, guid: 6ba7e76d764c19949b10c2a69edd391a, type: 3}
   m_PrefabInstance: {fileID: 285394676}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &285394682
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 75563152}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0b148fe25e99eb48b9724523833bab1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Delegates:
+  - eventID: 0
+    callback:
+      m_PersistentCalls:
+        m_Calls:
+        - m_Target: {fileID: 1261774009}
+          m_TargetAssemblyTypeName: UIButtonHoverSound, Assembly-CSharp
+          m_MethodName: PlayHover
+          m_Mode: 1
+          m_Arguments:
+            m_ObjectArgument: {fileID: 0}
+            m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+            m_IntArgument: 0
+            m_FloatArgument: 0
+            m_StringArgument: 
+            m_BoolArgument: 0
+          m_CallState: 2
+  - eventID: 4
+    callback:
+      m_PersistentCalls:
+        m_Calls:
+        - m_Target: {fileID: 1261774009}
+          m_TargetAssemblyTypeName: UIButtonHoverSound, Assembly-CSharp
+          m_MethodName: PlayClick
+          m_Mode: 1
+          m_Arguments:
+            m_ObjectArgument: {fileID: 0}
+            m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+            m_IntArgument: 0
+            m_FloatArgument: 0
+            m_StringArgument: 
+            m_BoolArgument: 0
+          m_CallState: 2
 --- !u!1 &288089274
 GameObject:
   m_ObjectHideFlags: 0
@@ -3693,6 +3847,18 @@ MonoBehaviour:
       - m_Target: {fileID: 520800213}
         m_TargetAssemblyTypeName: EmptyBoardMode, Assembly-CSharp
         m_MethodName: TogglePerspective
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+      - m_Target: {fileID: 1261774009}
+        m_TargetAssemblyTypeName: UIButtonHoverSound, Assembly-CSharp
+        m_MethodName: PlaySwitch
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -8006,7 +8172,19 @@ MonoBehaviour:
       m_Calls: []
   m_OnValueChanged:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 0}
+        m_TargetAssemblyTypeName: 
+        m_MethodName: 
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: 
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
   m_OnTouchScreenKeyboardStatusChanged:
     m_PersistentCalls:
       m_Calls: []
@@ -9205,13 +9383,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a41e2a19efed7c441b18a01a5086ae62, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  hoverClip: {fileID: 0}
-  audioSource: {fileID: 0}
-  moveSound: {fileID: 0}
-  captureSound: {fileID: 0}
-  checkSound: {fileID: 0}
+  audioSource: {fileID: 1261774007}
+  hoverClip: {fileID: 8300000, guid: ce86f82dede820a47a1b25134771cec1, type: 3}
+  clickClip: {fileID: 8300000, guid: 627f50ddbbd34d84f9c8fb48bcbbb447, type: 3}
+  switchClip: {fileID: 8300000, guid: 679cbe119cdc8094a875794e66c782f3, type: 3}
+  revealClip: {fileID: 8300000, guid: f7922bba64993c44cb52c093de00f706, type: 3}
+  revealEndClip: {fileID: 8300000, guid: 52e45ddb7a4365b449d81a7237a8a1c1, type: 3}
+  captureClip: {fileID: 0}
+  checkClip: {fileID: 0}
+  checkmateClip: {fileID: 0}
+  stalemateClip: {fileID: 0}
   correctClip: {fileID: 0}
   wrongClip: {fileID: 0}
+  moveClips:
+  - {fileID: 8300000, guid: c5a951cf48fa4b14c811af8fc8758fc6, type: 3}
+  - {fileID: 8300000, guid: 5f7c398816a56ce47b5a0ad9abc77aa6, type: 3}
 --- !u!1 &1266376371
 GameObject:
   m_ObjectHideFlags: 0
