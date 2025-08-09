@@ -72,7 +72,7 @@ public class BlindfoldUI : MonoBehaviour
     {
         currentRevealCount = maxRevealCount;
         chessBoardObject.SetActive(false);
-    //  moveInputField.text = "Choose difficulty. \n";
+    //  moveInputField.text = "Choose difficulty.";
         moveInputField.interactable = false; // Disabled until difficulty is set
 
         if (errorMessageText != null)
@@ -768,7 +768,7 @@ public class BlindfoldUI : MonoBehaviour
         }
         else
         {
-            moveLogText.text += $"{moveNotation}\n";
+            moveLogText.text += $"{moveNotation}";
         }
     }
 
@@ -777,7 +777,7 @@ public class BlindfoldUI : MonoBehaviour
         // Reset UI state
         currentRevealCount = maxRevealCount;
         moveHistory.Clear();
-        moveLogText.text = "Type your moves (e.g., e4, Nf3)\n";
+        moveLogText.text = "Type your moves (e.g., e4, Nf3)";
         moveInputField.text = "";
         moveInputField.interactable = false;
         isDifficultySet = false;

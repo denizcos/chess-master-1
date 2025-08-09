@@ -1,10 +1,19 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEngine.Networking;
 using System.Collections;
+using Unity.Services.Core;
+using Unity.Services.Authentication;
+using Unity.Services.Lobbies;
+using Unity.Services.Lobbies.Models;
+using Unity.Services.Relay;
+using Unity.Services.Relay.Models;
+using Unity.Netcode;
+using Unity.Netcode.Transports.UTP;
+using Unity.Networking.Transport.Relay;
+using System.Threading.Tasks;
 
 [System.Serializable]
 public class LobbyData
@@ -78,42 +87,71 @@ public class MultiplayerLobbyManager : MonoBehaviour
     public Button joinCancelButton;
     public TMP_Text joinErrorText;
 
+    [Header("Direct Join UI")]
+    public GameObject directJoinPanel;
+    public TMP_InputField directJoinCodeInput;
+    public Button directJoinButton;
+    public Button directJoinCancelButton;
+
     [Header("Settings")]
     public float refreshInterval = 5f;
     public int maxChatMessages = 50;
     public Color readyColor = Color.green;
     public Color notReadyColor = Color.red;
 
-    // Network simulation (replace with actual networking)
-    private Dictionary<string, LobbyData> activeLobbies = new Dictionary<string, LobbyData>();
-    private Dictionary<string, List<PlayerData>> lobbyPlayers = new Dictionary<string, List<PlayerData>>();
+    // Keep this for chat (will sync via Netcode later)
     private Dictionary<string, List<string>> lobbyChatMessages = new Dictionary<string, List<string>>();
+
+    // Unity Services variables
+    private Lobby currentUnityLobby;
+    private List<Lobby> availableLobbies = new List<Lobby>();
+    private string joinCode;
+    private Coroutine heartbeatCoroutine;
+    private ChessNetworkSync networkSync;
 
     // Current session data
     private string currentLobbyId;
     private string currentPlayerId;
-    private string currentPlayerName;
+    public string currentPlayerName { get; private set; }  // Made public property for network sync
     private bool isHost;
-    private PlayerData localPlayer;
-    private PlayerData remotePlayer;
+    public PlayerData localPlayer { get; private set; }    // Made public property for network sync
+    public PlayerData remotePlayer { get; private set; }   // Made public property for network sync
 
     // References to game components
     private ChessRules chessRules;
     private BlindfoldMultiplayerUI multiplayerUI;
 
-    private Coroutine refreshCoroutine;
-
-    void Start()
+    async void Start()
     {
+        // Initialize Unity Services
+        try
+        {
+            await UnityServices.InitializeAsync();
+
+            if (!AuthenticationService.Instance.IsSignedIn)
+            {
+                await AuthenticationService.Instance.SignInAnonymouslyAsync();
+                currentPlayerId = AuthenticationService.Instance.PlayerId;
+                Debug.Log($"Signed in with Player ID: {currentPlayerId}");
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Failed to initialize Unity Services: {e.Message}");
+        }
+
         InitializeUI();
         GeneratePlayerId();
 
-        // Get chess components
-        chessRules = FindObjectOfType<ChessRules>();
+        // Get chess components - use new Unity method
+        chessRules = FindFirstObjectByType<ChessRules>();
         if (chessRules == null)
         {
             Debug.LogError("ChessRules component not found!");
         }
+
+        // Get network sync - use new Unity method
+        networkSync = FindFirstObjectByType<ChessNetworkSync>();
     }
 
     void InitializeUI()
@@ -121,10 +159,10 @@ public class MultiplayerLobbyManager : MonoBehaviour
         // Set up button listeners
         createLobbyButton.onClick.AddListener(() => ShowCreateLobbyPanel());
         refreshButton.onClick.AddListener(() => RefreshLobbyList());
-        backToMenuButton.onClick.AddListener(() => BackToMainMenu());
+        backToMenuButton.onClick.AddListener(() => ShowMainMenu());
 
         confirmCreateButton.onClick.AddListener(() => CreateLobby());
-        cancelCreateButton.onClick.AddListener(() => CancelCreateLobby());
+        cancelCreateButton.onClick.AddListener(() => ShowLobbyListPanel());
 
         readyButton.onClick.AddListener(() => ToggleReady());
         startGameButton.onClick.AddListener(() => StartGame());
@@ -140,43 +178,44 @@ public class MultiplayerLobbyManager : MonoBehaviour
         privateToggle.onValueChanged.AddListener((value) => OnPrivateToggleChanged(value));
         searchInput.onValueChanged.AddListener((text) => OnSearchChanged(text));
 
-        // Initialize panels
-        ShowLobbyListPanel();
-        passwordGroup.SetActive(false);
-    }
+        // Direct join button
+        if (directJoinButton != null)
+        {
+            directJoinButton.onClick.AddListener(() => DirectJoinLobby());
+            directJoinCancelButton.onClick.AddListener(() => { directJoinPanel.SetActive(false); });
+        }
 
+        // SADECE KENDI PANEL KONTROLÜ - DİĞER MODLARA BULAŞMA
+        passwordGroup.SetActive(false);
+
+        // EĞER LOBBY LIST PANEL AÇIKSA REFRESH YAP
+        if (lobbyListPanel.activeSelf)
+        {
+            RefreshLobbyList();
+        }
+    }
     void GeneratePlayerId()
     {
-        currentPlayerId = System.Guid.NewGuid().ToString();
-        currentPlayerName = "Player" + Random.Range(1000, 9999);
+        // Use Unity's authenticated player ID
+        currentPlayerId = AuthenticationService.Instance.PlayerId;
+        if (string.IsNullOrEmpty(currentPlayerName))
+            currentPlayerName = "Player" + Random.Range(1000, 9999);
     }
 
     #region Panel Management
 
-    void HideAllPanels()
-    {
-        if (mainMenuPanel) mainMenuPanel.SetActive(false);
-        if (lobbyListPanel) lobbyListPanel.SetActive(false);
-        if (createLobbyPanel) createLobbyPanel.SetActive(false);
-        if (lobbyRoomPanel) lobbyRoomPanel.SetActive(false);
-        if (gamePanel) gamePanel.SetActive(false);
-        if (passwordPromptPanel) passwordPromptPanel.SetActive(false);
-    }
-
     public void ShowLobbyListPanel()
     {
-        HideAllPanels();
         lobbyListPanel.SetActive(true);
+        if (createLobbyPanel) createLobbyPanel.SetActive(false);
+        if (lobbyRoomPanel) lobbyRoomPanel.SetActive(false);
         RefreshLobbyList();
-
-        if (refreshCoroutine != null) StopCoroutine(refreshCoroutine);
-        refreshCoroutine = StartCoroutine(AutoRefreshLobbies());
     }
 
     void ShowCreateLobbyPanel()
     {
-        HideAllPanels();
         createLobbyPanel.SetActive(true);
+        lobbyListPanel.SetActive(false);
 
         // Reset input fields
         lobbyNameInput.text = currentPlayerName + "'s Game";
@@ -188,15 +227,17 @@ public class MultiplayerLobbyManager : MonoBehaviour
 
     void ShowLobbyRoomPanel()
     {
-        HideAllPanels();
         lobbyRoomPanel.SetActive(true);
+        lobbyListPanel.SetActive(false);
+        createLobbyPanel.SetActive(false);
         UpdateLobbyRoomUI();
+        StartLobbyHeartbeat();
     }
 
-    void ShowGamePanel()
+    public void ShowGamePanel()  // Made public for network sync
     {
-        HideAllPanels();
         gamePanel.SetActive(true);
+        if (lobbyRoomPanel) lobbyRoomPanel.SetActive(false);
 
         if (multiplayerUI == null)
         {
@@ -210,12 +251,18 @@ public class MultiplayerLobbyManager : MonoBehaviour
         multiplayerUI.InitializeGame(chessRules, localPlayer, remotePlayer, this);
     }
 
-    void BackToMainMenu()
+    void ShowMainMenu()
     {
-        if (refreshCoroutine != null) StopCoroutine(refreshCoroutine);
-
-        HideAllPanels();
-        if (mainMenuPanel) mainMenuPanel.SetActive(true);
+        StopLobbyHeartbeat();
+        if (mainMenuPanel)
+        {
+            mainMenuPanel.SetActive(true);
+            lobbyListPanel.SetActive(false);
+        }
+        else
+        {
+            lobbyListPanel.SetActive(true);
+        }
     }
 
     #endregion
@@ -228,105 +275,266 @@ public class MultiplayerLobbyManager : MonoBehaviour
         if (!isPrivate) passwordInput.text = "";
     }
 
-    void CreateLobby()
+    async void CreateLobby()
     {
-        string lobbyName = string.IsNullOrEmpty(lobbyNameInput.text) ?
-            currentPlayerName + "'s Game" : lobbyNameInput.text;
-        string hostName = string.IsNullOrEmpty(hostNameInput.text) ?
-            currentPlayerName : hostNameInput.text;
-
-        currentPlayerName = hostName;
-
-        // Generate lobby ID
-        string lobbyId = "LOBBY_" + System.Guid.NewGuid().ToString().Substring(0, 8).ToUpper();
-
-        // Create lobby data
-        LobbyData newLobby = new LobbyData
+        try
         {
-            lobbyId = lobbyId,
-            hostName = hostName,
-            lobbyName = lobbyName,
-            isPrivate = privateToggle.isOn,
-            password = privateToggle.isOn ? passwordInput.text : "",
-            isFull = false,
-            playerCount = 1,
-            createdTime = System.DateTimeOffset.Now.ToUnixTimeSeconds()
-        };
+            string lobbyName = string.IsNullOrEmpty(lobbyNameInput.text) ?
+                currentPlayerName + "'s Game" : lobbyNameInput.text;
+            string hostName = string.IsNullOrEmpty(hostNameInput.text) ?
+                currentPlayerName : hostNameInput.text;
 
-        // Create host player
-        localPlayer = new PlayerData
+            currentPlayerName = hostName;
+
+            Debug.Log($"[CREATE] Starting lobby creation: {lobbyName} by {hostName}");
+
+            // Create Relay allocation first
+            Allocation allocation = await RelayService.Instance.CreateAllocationAsync(1);
+            joinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
+
+            Debug.Log($"[RELAY] Created relay with join code: {joinCode}");
+
+            // Create Unity Lobby - ENSURE IT'S PUBLIC
+            CreateLobbyOptions options = new CreateLobbyOptions
+            {
+                IsPrivate = false,  // FORCE PUBLIC for testing
+                Player = new Player
+                {
+                    Data = new Dictionary<string, PlayerDataObject>
+                {
+                    { "PlayerName", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, hostName) },
+                    { "IsReady", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, "false") },
+                    { "Color", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, "White") }
+                }
+                },
+                Data = new Dictionary<string, DataObject>
+            {
+                { "JoinCode", new DataObject(DataObject.VisibilityOptions.Public, joinCode) },
+                { "Password", new DataObject(DataObject.VisibilityOptions.Public, "") }
+                // Removed GameMode for now
+            }
+            };
+
+            currentUnityLobby = await LobbyService.Instance.CreateLobbyAsync(lobbyName, 2, options);
+
+            Debug.Log($"[SUCCESS] Created lobby: {currentUnityLobby.Name}");
+            Debug.Log($"[SUCCESS] Lobby ID: {currentUnityLobby.Id}");
+            Debug.Log($"[SUCCESS] Lobby Code: {currentUnityLobby.LobbyCode}");
+            Debug.Log($"[SUCCESS] Is Private: {currentUnityLobby.IsPrivate}");
+            Debug.Log($"[SUCCESS] Max Players: {currentUnityLobby.MaxPlayers}");
+
+            // Configure Unity Transport for Relay
+            var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            transport.SetHostRelayData(
+                allocation.RelayServer.IpV4,
+                (ushort)allocation.RelayServer.Port,
+                allocation.AllocationIdBytes,
+                allocation.Key,
+                allocation.ConnectionData
+            );
+
+            // Start as host
+            NetworkManager.Singleton.StartHost();
+
+            currentLobbyId = currentUnityLobby.Id;
+            isHost = true;
+
+            // Create local player data
+            localPlayer = new PlayerData
+            {
+                playerId = currentPlayerId,
+                playerName = hostName,
+                isHost = true,
+                isReady = false,
+                color = ChessRules.PieceColor.White
+            };
+
+            lobbyChatMessages[currentLobbyId] = new List<string>();
+
+            ShowLobbyRoomPanel();
+            AddChatMessage("System", $"{hostName} created the lobby.");
+
+            // TEST: Query lobbies immediately after creating to see if it appears
+            await Task.Delay(1000); // Wait 1 second
+            Debug.Log("[TEST] Querying lobbies after creation...");
+            QueryResponse testQuery = await LobbyService.Instance.QueryLobbiesAsync();
+            Debug.Log($"[TEST] Found {testQuery.Results.Count} lobbies after creating");
+            foreach (var lobby in testQuery.Results)
+            {
+                Debug.Log($"[TEST] - {lobby.Name} (ID: {lobby.Id})");
+            }
+        }
+        catch (System.Exception e)
         {
-            playerId = currentPlayerId,
-            playerName = hostName,
-            isHost = true,
-            isReady = false,
-            color = ChessRules.PieceColor.White
-        };
-
-        // Add to active lobbies
-        activeLobbies[lobbyId] = newLobby;
-        lobbyPlayers[lobbyId] = new List<PlayerData> { localPlayer };
-        lobbyChatMessages[lobbyId] = new List<string>();
-
-        currentLobbyId = lobbyId;
-        isHost = true;
-
-        ShowLobbyRoomPanel();
-        AddChatMessage("System", $"{hostName} created the lobby.");
+            Debug.LogError($"[ERROR] Failed to create lobby: {e.Message}");
+            Debug.LogError($"[ERROR] Stack trace: {e.StackTrace}");
+            ShowLobbyListPanel();
+        }
     }
-
-    void CancelCreateLobby()
+    public async void TestUnityServices()
     {
-        ShowLobbyListPanel();
-    }
+        Debug.Log("=== TESTING UNITY SERVICES CONNECTION ===");
 
+        try
+        {
+            // Check authentication
+            if (AuthenticationService.Instance.IsSignedIn)
+            {
+                Debug.Log($"[AUTH] Signed in as: {AuthenticationService.Instance.PlayerId}");
+            }
+            else
+            {
+                Debug.LogError("[AUTH] Not signed in!");
+                return;
+            }
+
+            // Try to query all lobbies
+            QueryResponse response = await LobbyService.Instance.QueryLobbiesAsync();
+            Debug.Log($"[QUERY] Successfully queried lobbies. Found: {response.Results.Count}");
+
+            // Try to create a test lobby
+            var testLobby = await LobbyService.Instance.CreateLobbyAsync(
+                "Test Lobby " + Random.Range(1000, 9999),
+                2,
+                new CreateLobbyOptions { IsPrivate = false }
+            );
+            Debug.Log($"[CREATE] Successfully created test lobby: {testLobby.Id}");
+
+            // Query again
+            await Task.Delay(500);
+            response = await LobbyService.Instance.QueryLobbiesAsync();
+            Debug.Log($"[QUERY] After creating test lobby, found: {response.Results.Count} lobbies");
+
+            // Delete test lobby
+            await LobbyService.Instance.DeleteLobbyAsync(testLobby.Id);
+            Debug.Log("[DELETE] Test lobby deleted");
+
+            Debug.Log("=== ALL TESTS PASSED ===");
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[TEST ERROR] {e.Message}");
+        }
+    }
     #endregion
 
     #region Lobby List Management
 
-    void RefreshLobbyList()
+    async void RefreshLobbyList()
     {
-        // Clear existing items
-        foreach (Transform child in lobbyListContent)
+        try
         {
-            Destroy(child.gameObject);
+            Debug.Log("=== STARTING LOBBY REFRESH ===");
+
+            // SIMPLIFIED QUERY - No filters at first to see ALL lobbies
+            QueryLobbiesOptions queryOptions = new QueryLobbiesOptions
+            {
+                Count = 25
+                // Removed ALL filters temporarily to see if lobbies appear
+            };
+
+            QueryResponse queryResponse = await LobbyService.Instance.QueryLobbiesAsync(queryOptions);
+            availableLobbies = queryResponse.Results;
+
+            Debug.Log($"[LOBBY QUERY] Found {availableLobbies.Count} total lobbies from Unity");
+
+            // Log details of each lobby found
+            foreach (var lobby in availableLobbies)
+            {
+                Debug.Log($"[LOBBY] Name: {lobby.Name}, ID: {lobby.Id}, Players: {lobby.Players.Count}/{lobby.MaxPlayers}, Private: {lobby.IsPrivate}");
+            }
+
+            // Clear existing items
+            foreach (Transform child in lobbyListContent)
+            {
+                Destroy(child.gameObject);
+            }
+
+            // Don't filter by search for now - show ALL lobbies
+            foreach (var lobby in availableLobbies)
+            {
+                CreateLobbyListItem(lobby);
+            }
+
+            Debug.Log($"[UI] Created {lobbyListContent.childCount} UI items in content panel");
+            Debug.Log("=== LOBBY REFRESH COMPLETE ===");
         }
-
-        // Filter lobbies based on search
-        string searchTerm = searchInput.text.ToLower();
-        var filteredLobbies = activeLobbies.Values
-            .Where(l => !l.isFull && (string.IsNullOrEmpty(searchTerm) ||
-                l.lobbyName.ToLower().Contains(searchTerm) ||
-                l.hostName.ToLower().Contains(searchTerm)))
-            .OrderByDescending(l => l.createdTime);
-
-        // Create lobby items
-        foreach (var lobby in filteredLobbies)
+        catch (System.Exception e)
         {
-            CreateLobbyListItem(lobby);
+            Debug.LogError($"[ERROR] Failed to refresh lobbies: {e.Message}");
+            Debug.LogError($"[ERROR] Stack trace: {e.StackTrace}");
         }
+        Debug.Log($"[UI] Created {lobbyListContent.childCount} UI items in content panel");
+        Debug.Log("=== LOBBY REFRESH COMPLETE ===");
+
+        // Force UI update
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(lobbyListContent.GetComponent<RectTransform>());
+
+        // Debug check
+        DebugCheckLobbyListUI();
     }
 
-    void CreateLobbyListItem(LobbyData lobby)
+    void CreateLobbyListItem(Lobby lobby)
     {
+        if (lobbyItemPrefab == null || lobbyListContent == null)
+        {
+            Debug.LogError("Missing prefab or content reference!");
+            return;
+        }
+
         GameObject item = Instantiate(lobbyItemPrefab, lobbyListContent);
 
-        // Set up the lobby item UI (assumes prefab has these components)
+        // FORCE the item to be active
+        item.SetActive(true);
+
+        // Make sure it has a proper RectTransform
+        RectTransform itemRect = item.GetComponent<RectTransform>();
+        if (itemRect == null)
+        {
+            itemRect = item.AddComponent<RectTransform>();
+        }
+
+        // Set anchoring for vertical list
+        itemRect.anchorMin = new Vector2(0, 1);
+        itemRect.anchorMax = new Vector2(1, 1);
+        itemRect.pivot = new Vector2(0.5f, 1);
+
+        // Set size if needed (adjust these values based on your design)
+        if (itemRect.rect.height < 10) // If height is too small
+        {
+            itemRect.sizeDelta = new Vector2(itemRect.sizeDelta.x, 80); // Set a minimum height
+        }
+
+        Debug.Log($"Created lobby item: {item.name} at position {item.transform.localPosition}");
+
+        // Rest of your code for setting up the item...
+        string hostName = "Unknown";
+        var hostPlayer = lobby.Players.FirstOrDefault(p => p.Id == lobby.HostId);
+        if (hostPlayer != null && hostPlayer.Data.ContainsKey("PlayerName"))
+        {
+            hostName = hostPlayer.Data["PlayerName"].Value;
+        }
+
+        // Set up the UI elements...
         TMP_Text lobbyNameText = item.transform.Find("LobbyName")?.GetComponent<TMP_Text>();
         TMP_Text hostNameText = item.transform.Find("HostName")?.GetComponent<TMP_Text>();
         TMP_Text playerCountText = item.transform.Find("PlayerCount")?.GetComponent<TMP_Text>();
         Image lockIcon = item.transform.Find("LockIcon")?.GetComponent<Image>();
         Button joinButton = item.GetComponent<Button>() ?? item.transform.Find("JoinButton")?.GetComponent<Button>();
 
-        if (lobbyNameText) lobbyNameText.text = lobby.lobbyName;
-        if (hostNameText) hostNameText.text = "Host: " + lobby.hostName;
-        if (playerCountText) playerCountText.text = $"{lobby.playerCount}/2";
-        if (lockIcon) lockIcon.gameObject.SetActive(lobby.isPrivate);
+        if (lobbyNameText) lobbyNameText.text = lobby.Name;
+        if (hostNameText) hostNameText.text = "Host: " + hostName;
+        if (playerCountText) playerCountText.text = $"{lobby.Players.Count}/{lobby.MaxPlayers}";
+        if (lockIcon) lockIcon.gameObject.SetActive(lobby.IsPrivate);
 
         if (joinButton)
         {
-            joinButton.onClick.AddListener(() => AttemptJoinLobby(lobby.lobbyId));
+            joinButton.onClick.AddListener(() => AttemptJoinLobby(lobby));
         }
+
+        // Force layout rebuild
+        LayoutRebuilder.ForceRebuildLayoutImmediate(lobbyListContent.GetComponent<RectTransform>());
     }
 
     void OnSearchChanged(string searchText)
@@ -334,53 +542,38 @@ public class MultiplayerLobbyManager : MonoBehaviour
         RefreshLobbyList();
     }
 
-    IEnumerator AutoRefreshLobbies()
-    {
-        while (lobbyListPanel.activeSelf)
-        {
-            yield return new WaitForSeconds(refreshInterval);
-            RefreshLobbyList();
-        }
-    }
-
     #endregion
 
     #region Joining Lobbies
 
-    void AttemptJoinLobby(string lobbyId)
+    Lobby pendingLobby;
+
+    void AttemptJoinLobby(Lobby lobby)
     {
-        if (!activeLobbies.ContainsKey(lobbyId))
-        {
-            Debug.LogError("Lobby not found!");
-            return;
-        }
+        pendingLobby = lobby;
 
-        LobbyData lobby = activeLobbies[lobbyId];
-
-        if (lobby.isPrivate)
+        if (lobby.Data.ContainsKey("Password") && !string.IsNullOrEmpty(lobby.Data["Password"].Value))
         {
-            // Show password prompt
             passwordPromptPanel.SetActive(true);
             joinPasswordInput.text = "";
             joinErrorText.text = "";
-            currentLobbyId = lobbyId; // Store for password confirmation
         }
         else
         {
-            JoinLobby(lobbyId);
+            JoinLobby(lobby);
         }
     }
 
     void ConfirmJoinWithPassword()
     {
-        if (string.IsNullOrEmpty(currentLobbyId)) return;
+        if (pendingLobby == null) return;
 
-        LobbyData lobby = activeLobbies[currentLobbyId];
+        string correctPassword = pendingLobby.Data["Password"].Value;
 
-        if (joinPasswordInput.text == lobby.password)
+        if (joinPasswordInput.text == correctPassword)
         {
             passwordPromptPanel.SetActive(false);
-            JoinLobby(currentLobbyId);
+            JoinLobby(pendingLobby);
         }
         else
         {
@@ -392,154 +585,362 @@ public class MultiplayerLobbyManager : MonoBehaviour
     void CancelJoinWithPassword()
     {
         passwordPromptPanel.SetActive(false);
-        currentLobbyId = null;
+        pendingLobby = null;
     }
 
-    void JoinLobby(string lobbyId)
+    async void JoinLobby(Lobby lobby)
     {
-        if (!activeLobbies.ContainsKey(lobbyId)) return;
-
-        LobbyData lobby = activeLobbies[lobbyId];
-
-        // Create joining player
-        localPlayer = new PlayerData
+        try
         {
-            playerId = currentPlayerId,
-            playerName = currentPlayerName,
-            isHost = false,
-            isReady = false,
-            color = ChessRules.PieceColor.Black
-        };
+            JoinLobbyByIdOptions options = new JoinLobbyByIdOptions
+            {
+                Player = new Player
+                {
+                    Data = new Dictionary<string, PlayerDataObject>
+                    {
+                        { "PlayerName", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, currentPlayerName) },
+                        { "IsReady", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, "false") },
+                        { "Color", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, "Black") }
+                    }
+                }
+            };
 
-        // Add to lobby
-        if (!lobbyPlayers.ContainsKey(lobbyId))
-            lobbyPlayers[lobbyId] = new List<PlayerData>();
+            currentUnityLobby = await LobbyService.Instance.JoinLobbyByIdAsync(lobby.Id, options);
 
-        lobbyPlayers[lobbyId].Add(localPlayer);
+            string relayJoinCode = currentUnityLobby.Data["JoinCode"].Value;
+            JoinAllocation joinAllocation = await RelayService.Instance.JoinAllocationAsync(relayJoinCode);
 
-        // Update lobby info
-        lobby.playerCount = lobbyPlayers[lobbyId].Count;
-        lobby.isFull = lobby.playerCount >= 2;
-        activeLobbies[lobbyId] = lobby;
+            // Configure Unity Transport
+            var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            transport.SetClientRelayData(
+                joinAllocation.RelayServer.IpV4,
+                (ushort)joinAllocation.RelayServer.Port,
+                joinAllocation.AllocationIdBytes,
+                joinAllocation.Key,
+                joinAllocation.ConnectionData,
+                joinAllocation.HostConnectionData
+            );
 
-        currentLobbyId = lobbyId;
-        isHost = false;
+            NetworkManager.Singleton.StartClient();
 
-        // Get remote player (host)
-        remotePlayer = lobbyPlayers[lobbyId].FirstOrDefault(p => p.playerId != currentPlayerId);
+            currentLobbyId = currentUnityLobby.Id;
+            isHost = false;
 
-        ShowLobbyRoomPanel();
-        AddChatMessage("System", $"{currentPlayerName} joined the lobby.");
+            localPlayer = new PlayerData
+            {
+                playerId = currentPlayerId,
+                playerName = currentPlayerName,
+                isHost = false,
+                isReady = false,
+                color = ChessRules.PieceColor.Black
+            };
+
+            if (!lobbyChatMessages.ContainsKey(currentLobbyId))
+                lobbyChatMessages[currentLobbyId] = new List<string>();
+
+            ShowLobbyRoomPanel();
+            AddChatMessage("System", $"{currentPlayerName} joined the lobby.");
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Failed to join lobby: {e.Message}");
+            ShowLobbyListPanel();
+        }
     }
-
-    void LeaveLobby()
+    public void DebugCheckLobbyListUI()
     {
-        if (string.IsNullOrEmpty(currentLobbyId)) return;
+        Debug.Log("=== CHECKING LOBBY LIST UI SETUP ===");
 
-        if (lobbyPlayers.ContainsKey(currentLobbyId))
+        // Check if content exists
+        if (lobbyListContent == null)
         {
-            lobbyPlayers[currentLobbyId].RemoveAll(p => p.playerId == currentPlayerId);
+            Debug.LogError("lobbyListContent is NULL! Assign it in the Inspector!");
+            return;
+        }
 
-            if (isHost || lobbyPlayers[currentLobbyId].Count == 0)
-            {
-                // Close lobby if host leaves or empty
-                activeLobbies.Remove(currentLobbyId);
-                lobbyPlayers.Remove(currentLobbyId);
-                lobbyChatMessages.Remove(currentLobbyId);
-            }
-            else
-            {
-                // Update lobby info
-                var lobby = activeLobbies[currentLobbyId];
-                lobby.playerCount = lobbyPlayers[currentLobbyId].Count;
-                lobby.isFull = false;
-                activeLobbies[currentLobbyId] = lobby;
+        Debug.Log($"lobbyListContent exists: {lobbyListContent.name}");
+        Debug.Log($"Content has {lobbyListContent.childCount} children");
 
-                AddChatMessage("System", $"{currentPlayerName} left the lobby.");
+        // Check the RectTransform
+        RectTransform contentRect = lobbyListContent.GetComponent<RectTransform>();
+        Debug.Log($"Content RectTransform size: {contentRect.rect.width} x {contentRect.rect.height}");
+        Debug.Log($"Content position: {contentRect.anchoredPosition}");
+
+        // Check if there's a Layout Group
+        var layoutGroup = lobbyListContent.GetComponent<LayoutGroup>();
+        if (layoutGroup != null)
+        {
+            Debug.Log($"Has LayoutGroup: {layoutGroup.GetType().Name}");
+            Debug.Log($"LayoutGroup enabled: {layoutGroup.enabled}");
+        }
+        else
+        {
+            Debug.LogWarning("No LayoutGroup on content! Add VerticalLayoutGroup or GridLayoutGroup!");
+        }
+
+        // Check if there's a Content Size Fitter
+        var sizeFitter = lobbyListContent.GetComponent<ContentSizeFitter>();
+        if (sizeFitter != null)
+        {
+            Debug.Log($"Has ContentSizeFitter - Vertical: {sizeFitter.verticalFit}, Horizontal: {sizeFitter.horizontalFit}");
+        }
+        else
+        {
+            Debug.LogWarning("No ContentSizeFitter! This might be needed for scrolling.");
+        }
+
+        // Check the scroll rect
+        ScrollRect scrollRect = lobbyListContent.GetComponentInParent<ScrollRect>();
+        if (scrollRect != null)
+        {
+            Debug.Log($"Found ScrollRect in parent");
+            Debug.Log($"ScrollRect content is assigned: {scrollRect.content != null}");
+            Debug.Log($"ScrollRect viewport is assigned: {scrollRect.viewport != null}");
+        }
+        else
+        {
+            Debug.LogError("No ScrollRect found in parent! Your content needs to be inside a ScrollRect!");
+        }
+
+        // Check children visibility
+        foreach (Transform child in lobbyListContent)
+        {
+            Debug.Log($"Child: {child.name}, Active: {child.gameObject.activeSelf}, Position: {child.localPosition}");
+            RectTransform childRect = child.GetComponent<RectTransform>();
+            if (childRect != null)
+            {
+                Debug.Log($"  - Size: {childRect.rect.width} x {childRect.rect.height}");
             }
         }
 
-        currentLobbyId = null;
-        ShowLobbyListPanel();
+        // Check the prefab
+        if (lobbyItemPrefab != null)
+        {
+            Debug.Log($"Prefab assigned: {lobbyItemPrefab.name}");
+            RectTransform prefabRect = lobbyItemPrefab.GetComponent<RectTransform>();
+            if (prefabRect != null)
+            {
+                Debug.Log($"Prefab size: {prefabRect.rect.width} x {prefabRect.rect.height}");
+            }
+        }
+        else
+        {
+            Debug.LogError("lobbyItemPrefab is NULL!");
+        }
+
+        Debug.Log("=== END UI CHECK ===");
+    }
+    async void DirectJoinLobby()
+    {
+        string code = directJoinCodeInput.text.ToUpper();
+        if (string.IsNullOrEmpty(code))
+        {
+            Debug.LogError("Please enter a lobby code");
+            return;
+        }
+
+        try
+        {
+            JoinLobbyByCodeOptions options = new JoinLobbyByCodeOptions
+            {
+                Player = new Player
+                {
+                    Data = new Dictionary<string, PlayerDataObject>
+                    {
+                        { "PlayerName", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, currentPlayerName) },
+                        { "IsReady", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, "false") },
+                        { "Color", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, "Black") }
+                    }
+                }
+            };
+
+            currentUnityLobby = await LobbyService.Instance.JoinLobbyByCodeAsync(code, options);
+
+            string relayJoinCode = currentUnityLobby.Data["JoinCode"].Value;
+            JoinAllocation joinAllocation = await RelayService.Instance.JoinAllocationAsync(relayJoinCode);
+
+            var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            transport.SetClientRelayData(
+                joinAllocation.RelayServer.IpV4,
+                (ushort)joinAllocation.RelayServer.Port,
+                joinAllocation.AllocationIdBytes,
+                joinAllocation.Key,
+                joinAllocation.ConnectionData,
+                joinAllocation.HostConnectionData
+            );
+
+            NetworkManager.Singleton.StartClient();
+
+            currentLobbyId = currentUnityLobby.Id;
+            isHost = false;
+
+            localPlayer = new PlayerData
+            {
+                playerId = currentPlayerId,
+                playerName = currentPlayerName,
+                isHost = false,
+                isReady = false,
+                color = ChessRules.PieceColor.Black
+            };
+
+            directJoinPanel.SetActive(false);
+            ShowLobbyRoomPanel();
+            AddChatMessage("System", $"{currentPlayerName} joined the lobby.");
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Failed to join with code: {e.Message}");
+        }
+    }
+
+    async void LeaveLobby()
+    {
+        try
+        {
+            if (currentUnityLobby != null)
+            {
+                if (isHost)
+                {
+                    await LobbyService.Instance.DeleteLobbyAsync(currentUnityLobby.Id);
+                }
+                else
+                {
+                    await LobbyService.Instance.RemovePlayerAsync(currentUnityLobby.Id, currentPlayerId);
+                }
+            }
+
+            if (NetworkManager.Singleton.IsHost)
+            {
+                NetworkManager.Singleton.Shutdown();
+            }
+            else if (NetworkManager.Singleton.IsClient)
+            {
+                NetworkManager.Singleton.Shutdown();
+            }
+
+            StopLobbyHeartbeat();
+            currentUnityLobby = null;
+            currentLobbyId = null;
+
+            ShowLobbyListPanel();
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Error leaving lobby: {e.Message}");
+        }
     }
 
     #endregion
 
     #region Lobby Room Management
 
-    void UpdateLobbyRoomUI()
+    public async void UpdateLobbyRoomUI()  // Made public for network sync
     {
-        if (string.IsNullOrEmpty(currentLobbyId)) return;
+        if (currentUnityLobby == null) return;
 
-        LobbyData lobby = activeLobbies[currentLobbyId];
-        List<PlayerData> players = lobbyPlayers[currentLobbyId];
-
-        lobbyNameText.text = lobby.lobbyName;
-        lobbyIdText.text = "ID: " + lobby.lobbyId;
-
-        // Update player displays
-        PlayerData player1 = players.FirstOrDefault(p => p.color == ChessRules.PieceColor.White);
-        PlayerData player2 = players.FirstOrDefault(p => p.color == ChessRules.PieceColor.Black);
-
-        player1NameText.text = player1 != null ? player1.playerName : "Waiting...";
-        player2NameText.text = player2 != null ? player2.playerName : "Waiting...";
-
-        player1ReadyIndicator.color = player1 != null && player1.isReady ? readyColor : notReadyColor;
-        player2ReadyIndicator.color = player2 != null && player2.isReady ? readyColor : notReadyColor;
-
-        // Update buttons
-        readyButton.interactable = players.Count == 2;
-        startGameButton.interactable = isHost && players.Count == 2 &&
-            players.All(p => p.isReady);
-        colorSwapButton.interactable = isHost && players.Count == 2;
-
-        // Update ready button text
-        TMP_Text readyButtonText = readyButton.GetComponentInChildren<TMP_Text>();
-        if (readyButtonText != null)
+        try
         {
-            readyButtonText.text = localPlayer != null && localPlayer.isReady ? "Not Ready" : "Ready";
-        }
+            currentUnityLobby = await LobbyService.Instance.GetLobbyAsync(currentUnityLobby.Id);
 
-        // Store remote player reference
-        remotePlayer = players.FirstOrDefault(p => p.playerId != currentPlayerId);
+            lobbyNameText.text = currentUnityLobby.Name;
+            lobbyIdText.text = "Code: " + currentUnityLobby.LobbyCode;
+
+            Player player1 = null;
+            Player player2 = null;
+
+            foreach (var player in currentUnityLobby.Players)
+            {
+                if (player.Data["Color"].Value == "White")
+                    player1 = player;
+                else if (player.Data["Color"].Value == "Black")
+                    player2 = player;
+            }
+
+            player1NameText.text = player1 != null ? player1.Data["PlayerName"].Value : "Waiting...";
+            player2NameText.text = player2 != null ? player2.Data["PlayerName"].Value : "Waiting...";
+
+            bool player1Ready = player1 != null && player1.Data["IsReady"].Value == "true";
+            bool player2Ready = player2 != null && player2.Data["IsReady"].Value == "true";
+
+            player1ReadyIndicator.color = player1Ready ? readyColor : notReadyColor;
+            player2ReadyIndicator.color = player2Ready ? readyColor : notReadyColor;
+
+            readyButton.interactable = currentUnityLobby.Players.Count == 2;
+            startGameButton.interactable = isHost && currentUnityLobby.Players.Count == 2 &&
+                player1Ready && player2Ready;
+            colorSwapButton.interactable = isHost && currentUnityLobby.Players.Count == 2;
+
+            TMP_Text readyButtonText = readyButton.GetComponentInChildren<TMP_Text>();
+            if (readyButtonText != null)
+            {
+                var myPlayer = currentUnityLobby.Players.FirstOrDefault(p => p.Id == currentPlayerId);
+                bool isReady = myPlayer != null && myPlayer.Data["IsReady"].Value == "true";
+                readyButtonText.text = isReady ? "Not Ready" : "Ready";
+                localPlayer.isReady = isReady;
+            }
+
+            var otherPlayer = currentUnityLobby.Players.FirstOrDefault(p => p.Id != currentPlayerId);
+            if (otherPlayer != null)
+            {
+                remotePlayer = new PlayerData
+                {
+                    playerId = otherPlayer.Id,
+                    playerName = otherPlayer.Data["PlayerName"].Value,
+                    isHost = otherPlayer.Id == currentUnityLobby.HostId,
+                    isReady = otherPlayer.Data["IsReady"].Value == "true",
+                    color = otherPlayer.Data["Color"].Value == "White" ?
+                        ChessRules.PieceColor.White : ChessRules.PieceColor.Black
+                };
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Failed to update lobby UI: {e.Message}");
+        }
     }
 
-    void ToggleReady()
+    async void ToggleReady()
     {
-        if (localPlayer == null) return;
+        if (currentUnityLobby == null) return;
 
-        localPlayer.isReady = !localPlayer.isReady;
-
-        // Update in lobby players list
-        var players = lobbyPlayers[currentLobbyId];
-        var playerIndex = players.FindIndex(p => p.playerId == currentPlayerId);
-        if (playerIndex >= 0)
+        try
         {
-            players[playerIndex] = localPlayer;
+            var myPlayer = currentUnityLobby.Players.FirstOrDefault(p => p.Id == currentPlayerId);
+            bool currentReady = myPlayer != null && myPlayer.Data["IsReady"].Value == "true";
+
+            UpdatePlayerOptions options = new UpdatePlayerOptions
+            {
+                Data = new Dictionary<string, PlayerDataObject>
+                {
+                    { "PlayerName", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, currentPlayerName) },
+                    { "IsReady", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, (!currentReady).ToString().ToLower()) },
+                    { "Color", myPlayer.Data["Color"] }
+                }
+            };
+
+            currentUnityLobby = await LobbyService.Instance.UpdatePlayerAsync(currentUnityLobby.Id, currentPlayerId, options);
+
+            localPlayer.isReady = !currentReady;
+            UpdateLobbyRoomUI();
+
+            string status = localPlayer.isReady ? "ready" : "not ready";
+            AddChatMessage("System", $"{localPlayer.playerName} is {status}.");
         }
-
-        UpdateLobbyRoomUI();
-
-        string status = localPlayer.isReady ? "ready" : "not ready";
-        AddChatMessage("System", $"{localPlayer.playerName} is {status}.");
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Failed to toggle ready: {e.Message}");
+        }
     }
 
     void SwapColors()
     {
-        if (!isHost || lobbyPlayers[currentLobbyId].Count != 2) return;
+        if (!isHost || currentUnityLobby == null || currentUnityLobby.Players.Count != 2) return;
 
-        var players = lobbyPlayers[currentLobbyId];
-        foreach (var player in players)
+        if (networkSync != null)
         {
-            player.color = player.color == ChessRules.PieceColor.White ?
-                ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
+            networkSync.RequestColorSwap();
         }
 
-        // Update local references
-        localPlayer = players.FirstOrDefault(p => p.playerId == currentPlayerId);
-        remotePlayer = players.FirstOrDefault(p => p.playerId != currentPlayerId);
-
-        UpdateLobbyRoomUI();
         AddChatMessage("System", "Colors swapped!");
     }
 
@@ -547,13 +948,57 @@ public class MultiplayerLobbyManager : MonoBehaviour
     {
         if (!isHost) return;
 
-        var players = lobbyPlayers[currentLobbyId];
-        if (players.Count != 2 || !players.All(p => p.isReady)) return;
+        if (currentUnityLobby == null || currentUnityLobby.Players.Count != 2) return;
 
         AddChatMessage("System", "Game starting!");
 
-        // Transition to game
+        if (networkSync != null)
+        {
+            networkSync.StartGameForAll();
+        }
+
         ShowGamePanel();
+    }
+
+    #endregion
+
+    #region Unity Lobby Heartbeat
+
+    void StartLobbyHeartbeat()
+    {
+        if (heartbeatCoroutine != null)
+            StopCoroutine(heartbeatCoroutine);
+        heartbeatCoroutine = StartCoroutine(LobbyHeartbeat());
+    }
+
+    void StopLobbyHeartbeat()
+    {
+        if (heartbeatCoroutine != null)
+        {
+            StopCoroutine(heartbeatCoroutine);
+            heartbeatCoroutine = null;
+        }
+    }
+
+    IEnumerator LobbyHeartbeat()
+    {
+        while (currentUnityLobby != null && isHost)
+        {
+            yield return new WaitForSecondsRealtime(15f);
+            HeartbeatLobbyAsync();
+        }
+    }
+
+    async void HeartbeatLobbyAsync()
+    {
+        try
+        {
+            await LobbyService.Instance.SendHeartbeatPingAsync(currentUnityLobby.Id);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Heartbeat failed: {e.Message}");
+        }
     }
 
     #endregion
@@ -568,12 +1013,18 @@ public class MultiplayerLobbyManager : MonoBehaviour
         if (string.IsNullOrEmpty(msgText)) return;
 
         AddChatMessage(currentPlayerName, msgText);
+
+        if (networkSync != null)
+        {
+            networkSync.SendChat(msgText, currentPlayerName);
+        }
+
         chatInput.text = "";
         chatInput.Select();
         chatInput.ActivateInputField();
     }
 
-    void AddChatMessage(string sender, string message)
+    public void AddChatMessage(string sender, string message)
     {
         if (string.IsNullOrEmpty(currentLobbyId)) return;
 
@@ -583,13 +1034,11 @@ public class MultiplayerLobbyManager : MonoBehaviour
         string formattedMessage = $"<b>{sender}:</b> {message}";
         lobbyChatMessages[currentLobbyId].Add(formattedMessage);
 
-        // Limit chat history
         if (lobbyChatMessages[currentLobbyId].Count > maxChatMessages)
         {
             lobbyChatMessages[currentLobbyId].RemoveAt(0);
         }
 
-        // Update chat display
         UpdateChatDisplay();
     }
 
@@ -609,13 +1058,10 @@ public class MultiplayerLobbyManager : MonoBehaviour
 
     public void SendMove(string move)
     {
-        // This would send the move to the remote player
-        // In a real implementation, this would use networking
-        if (remotePlayer != null)
+        if (remotePlayer != null && networkSync != null)
         {
             Debug.Log($"Sending move {move} to {remotePlayer.playerName}");
-            // Simulate receiving the move on the other end
-            StartCoroutine(SimulateReceiveMove(move));
+            networkSync.SendMove(move);
         }
     }
 
@@ -628,45 +1074,62 @@ public class MultiplayerLobbyManager : MonoBehaviour
     {
         AddChatMessage("System", $"Game ended: {result}");
 
-        // Reset ready states
-        if (lobbyPlayers.ContainsKey(currentLobbyId))
+        if (currentUnityLobby != null)
         {
-            foreach (var player in lobbyPlayers[currentLobbyId])
-            {
-                player.isReady = false;
-            }
+            ToggleReady(); // This will set to not ready
         }
 
-        // Return to lobby room
-        ShowLobbyRoomPanel();
+        // DON'T automatically go back to lobby room - let player decide
+        // ShowLobbyRoomPanel();
     }
 
-    IEnumerator SimulateReceiveMove(string move)
+    // Add this method to handle color swapping from network sync
+    public void SwapPlayerColors()
     {
-        // Simulate network delay
-        yield return new WaitForSeconds(0.5f);
-
-        if (multiplayerUI != null)
+        if (localPlayer != null)
         {
-            multiplayerUI.OnRemoteMoveReceived(move);
+            var newLocalColor = localPlayer.color == ChessRules.PieceColor.White ?
+                ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
+
+            localPlayer = new PlayerData
+            {
+                playerId = localPlayer.playerId,
+                playerName = localPlayer.playerName,
+                isHost = localPlayer.isHost,
+                isReady = localPlayer.isReady,
+                color = newLocalColor
+            };
+        }
+
+        if (remotePlayer != null)
+        {
+            var newRemoteColor = remotePlayer.color == ChessRules.PieceColor.White ?
+                ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
+
+            remotePlayer = new PlayerData
+            {
+                playerId = remotePlayer.playerId,
+                playerName = remotePlayer.playerName,
+                isHost = remotePlayer.isHost,
+                isReady = remotePlayer.isReady,
+                color = newRemoteColor
+            };
         }
     }
 
     #endregion
 
-    void OnDestroy()
+    async void OnDestroy()
     {
-        if (refreshCoroutine != null)
-        {
-            StopCoroutine(refreshCoroutine);
-        }
+        StopLobbyHeartbeat();
 
-        // Clean up lobby if host
-        if (isHost && !string.IsNullOrEmpty(currentLobbyId))
+        if (isHost && currentUnityLobby != null)
         {
-            activeLobbies.Remove(currentLobbyId);
-            lobbyPlayers.Remove(currentLobbyId);
-            lobbyChatMessages.Remove(currentLobbyId);
+            try
+            {
+                await LobbyService.Instance.DeleteLobbyAsync(currentUnityLobby.Id);
+            }
+            catch { }
         }
     }
 }
