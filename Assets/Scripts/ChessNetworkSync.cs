@@ -111,7 +111,7 @@ public class ChessNetworkSync : NetworkBehaviour
         }
     }
 
-    // Handle ready state synchronization
+    // Handle ready state synchronization - IMPROVED VERSION
     public void SyncReadyState(string playerId, bool isReady)
     {
         if (IsClient)
@@ -123,6 +123,7 @@ public class ChessNetworkSync : NetworkBehaviour
     [ServerRpc(RequireOwnership = false)]
     void SyncReadyServerRpc(string playerId, bool isReady)
     {
+        // Broadcast to all clients including sender for confirmation
         SyncReadyClientRpc(playerId, isReady);
     }
 
@@ -130,7 +131,23 @@ public class ChessNetworkSync : NetworkBehaviour
     void SyncReadyClientRpc(string playerId, bool isReady)
     {
         // Update ready state in UI
-        Debug.Log($"Player {playerId} is {(isReady ? "ready" : "not ready")}");
+        Debug.Log($"[NETWORK] Player {playerId} is {(isReady ? "ready" : "not ready")}");
+
+        // Force UI update to reflect the change
+        if (lobbyManager != null)
+        {
+            // Trigger UI update after a short delay to ensure Unity Lobby is updated
+            lobbyManager.StartCoroutine(DelayedUIUpdate());
+        }
+    }
+
+    System.Collections.IEnumerator DelayedUIUpdate()
+    {
+        yield return new WaitForSeconds(0.5f);
+        if (lobbyManager != null)
+        {
+            lobbyManager.UpdateLobbyRoomUI();
+        }
     }
 
     // Handle game over
@@ -169,6 +186,31 @@ public class ChessNetworkSync : NetworkBehaviour
         if (lobbyManager != null)
         {
             lobbyManager.AddChatMessage("System", "Opponent disconnected!");
+        }
+    }
+
+    // Add network callbacks for debugging
+    public override void OnNetworkSpawn()
+    {
+        base.OnNetworkSpawn();
+        Debug.Log($"[NETWORK] NetworkSync spawned - IsHost: {IsHost}, IsClient: {IsClient}");
+    }
+
+    // Add method to force lobby sync
+    public void ForceLobbySync()
+    {
+        if (IsHost)
+        {
+            ForceLobbyUpdateClientRpc();
+        }
+    }
+
+    [ClientRpc]
+    void ForceLobbyUpdateClientRpc()
+    {
+        if (lobbyManager != null)
+        {
+            lobbyManager.UpdateLobbyRoomUI();
         }
     }
 }
