@@ -261,16 +261,20 @@ public class MultiplayerLobbyManager : MonoBehaviour
         gamePanel.SetActive(true);
         if (lobbyRoomPanel) lobbyRoomPanel.SetActive(false);
 
+        // first try to grab an existing BlindfoldMultiplayerUI somewhere in the scene
         if (multiplayerUI == null)
-        {
-            multiplayerUI = gamePanel.GetComponent<BlindfoldMultiplayerUI>();
-            if (multiplayerUI == null)
-            {
-                multiplayerUI = gamePanel.AddComponent<BlindfoldMultiplayerUI>();
-            }
-        }
+            multiplayerUI = FindObjectOfType<BlindfoldMultiplayerUI>(true);
 
+        // as a fallback only, attach one to gamePanel
+        if (multiplayerUI == null)
+            multiplayerUI = gamePanel.AddComponent<BlindfoldMultiplayerUI>();
+
+        // make sure it's active
+        multiplayerUI.gameObject.SetActive(true);
+
+        // now initialize
         multiplayerUI.InitializeGame(chessRules, localPlayer, remotePlayer, this);
+
     }
 
     void ShowMainMenu()

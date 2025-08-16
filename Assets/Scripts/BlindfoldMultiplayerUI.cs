@@ -3,6 +3,8 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
+using System.Linq;
 
 public class BlindfoldMultiplayerUI : MonoBehaviour
 {
@@ -133,17 +135,15 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         // Clear existing squares
         foreach (Transform child in boardSquaresParent)
         {
-            Destroy(child.gameObject);
+            GameObject.Destroy(child.gameObject);
         }
 
         // Create board squares
-        bool isWhitePerspective = localPlayer.color == ChessRules.PieceColor.White;
-
         for (int row = 0; row < 8; row++)
         {
             for (int col = 0; col < 8; col++)
             {
-                GameObject square = Instantiate(squarePrefab, boardSquaresParent);
+                GameObject square = GameObject.Instantiate(squarePrefab, boardSquaresParent);
                 square.name = $"Square_{row}_{col}";
 
                 Image squareImage = square.GetComponent<Image>();
@@ -155,54 +155,8 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
                 squareImage.color = isLight ? lightSquareColor : darkSquareColor;
 
                 boardSquares[row, col] = squareImage;
-
-                // Add coordinate labels if needed
-                if (col == 0) // Left edge - rank numbers
-                {
-                    CreateRankLabel(square.transform, 8 - row);
-                }
-                if (row == 7) // Bottom edge - file letters
-                {
-                    CreateFileLabel(square.transform, (char)('a' + col));
-                }
             }
         }
-    }
-
-    void CreateRankLabel(Transform parent, int rank)
-    {
-        GameObject labelObj = new GameObject($"Rank{rank}");
-        labelObj.transform.SetParent(parent, false);
-
-        TMP_Text label = labelObj.AddComponent<TextMeshProUGUI>();
-        label.text = rank.ToString();
-        label.fontSize = 12;
-        label.color = Color.white;
-        label.alignment = TextAlignmentOptions.TopLeft;
-
-        RectTransform rect = labelObj.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0, 1);
-        rect.anchorMax = new Vector2(0, 1);
-        rect.pivot = new Vector2(0, 1);
-        rect.anchoredPosition = new Vector2(2, -2);
-    }
-
-    void CreateFileLabel(Transform parent, char file)
-    {
-        GameObject labelObj = new GameObject($"File{file}");
-        labelObj.transform.SetParent(parent, false);
-
-        TMP_Text label = labelObj.AddComponent<TextMeshProUGUI>();
-        label.text = file.ToString();
-        label.fontSize = 12;
-        label.color = Color.white;
-        label.alignment = TextAlignmentOptions.BottomRight;
-
-        RectTransform rect = labelObj.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(1, 0);
-        rect.anchorMax = new Vector2(1, 0);
-        rect.pivot = new Vector2(1, 0);
-        rect.anchoredPosition = new Vector2(-2, 2);
     }
 
     void StartGame()
@@ -283,7 +237,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     {
         ChessRules.PieceColor currentColor = chessRules.GetCurrentPlayerColor();
 
-        // Check if it's actually our turn in the chess engine
+        // Verify it's actually our turn according to the engine
         if (currentColor != localPlayer.color)
         {
             ShowError("Not your turn!");
@@ -292,42 +246,29 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
             return;
         }
 
-        // Handle castling
-        string upperMove = moveNotation.ToUpper();
-        if (upperMove == "O-O" || upperMove == "0-0")
+        // Castling keywords handled first
+        string upperMove = moveNotation.ToUpper().Replace("0-0-0","O-O-O").Replace("0-0","O-O");
+        if (upperMove == "O-O" || upperMove == "O-O-O")
         {
-            if (chessRules.CanCastle(currentColor, true))
+            bool kingside = upperMove == "O-O";
+            if (chessRules.CanCastle(currentColor, kingside))
             {
-                ExecuteLocalMove("O-O", true);
+                // Execute castling and log SAN with suffixes
+                ExecuteLocalCastling(kingside);
             }
             else
             {
-                ShowError("Kingside castling is not legal!");
+                ShowError((kingside ? "Kingside" : "Queenside") + " castling is not legal!");
                 moveInputField.text = "";
                 FocusInput();
             }
             return;
         }
 
-        if (upperMove == "O-O-O" || upperMove == "0-0-0")
+        // Try to parse: coordinate or SAN (loose)
+        if (TryParseAndValidateMove(moveNotation, currentColor, out int fr, out int fc, out int tr, out int tc))
         {
-            if (chessRules.CanCastle(currentColor, false))
-            {
-                ExecuteLocalMove("O-O-O", false);
-            }
-            else
-            {
-                ShowError("Queenside castling is not legal!");
-                moveInputField.text = "";
-                FocusInput();
-            }
-            return;
-        }
-
-        // Parse regular move
-        if (TryParseAndValidateMove(moveNotation, currentColor, out string fromSquare, out string toSquare))
-        {
-            ExecuteLocalMove(fromSquare + toSquare, false);
+            ExecuteLocalMove(fr, fc, tr, tc);
         }
         else
         {
@@ -337,67 +278,154 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         }
     }
 
-    bool TryParseAndValidateMove(string notation, ChessRules.PieceColor color,
-        out string fromSquare, out string toSquare)
+    // UPDATED: Accepts coordinate (e2e4) or SAN (e4, exd5, Nf3, Qxe7, etc) loosely
+    bool TryParseAndValidateMove(string notation, ChessRules.PieceColor color, out int fromRow, out int fromCol, out int toRow, out int toCol)
     {
-        fromSquare = toSquare = "";
+        fromRow = fromCol = toRow = toCol = -1;
+        if (string.IsNullOrWhiteSpace(notation)) return false;
 
-        // This is a simplified parser - you can expand it based on your needs
-        // For now, expecting moves like "e2e4" or "e4"
+        string clean = notation.Trim();
+        string lowered = clean.ToLower();
 
-        string cleanNotation = notation.ToLower().Replace("x", "").Replace("+", "").Replace("#", "");
-
-        if (cleanNotation.Length == 4) // Full coordinate notation like "e2e4"
+        // Coordinate "e2e4"
+        if (Regex.IsMatch(lowered, @"^[a-h][1-8][a-h][1-8]$"))
         {
-            fromSquare = cleanNotation.Substring(0, 2);
-            toSquare = cleanNotation.Substring(2, 2);
-
-            int fromCol = fromSquare[0] - 'a';
-            int fromRow = 8 - (fromSquare[1] - '0');
-            int toCol = toSquare[0] - 'a';
-            int toRow = 8 - (toSquare[1] - '0');
-
-            return chessRules.IsValidMove(fromRow, fromCol, toRow, toCol, color);
+            if (!TryParseSquare(lowered.Substring(0,2), out fromRow, out fromCol)) return false;
+            if (!TryParseSquare(lowered.Substring(2,2), out toRow, out toCol)) return false;
+            if (!chessRules.IsValidMove(fromRow, fromCol, toRow, toCol, color)) return false;
+            return true;
         }
 
-        // Add more parsing logic as needed for algebraic notation
+        // Normalize: remove spaces and check/mate marks; keep 'x' and '=' for our own use
+        string san = clean.Replace(" ", "").Replace("+", "").Replace("#", "");
+        san = san.Replace("0-0-0","O-O-O").Replace("0-0","O-O");
+
+        // Try SAN like Nf3, exd5, e4, Qxe7, Nbd2, R1e1, e8=Q, exd8=Q
+        // Pattern: ([KQRBN])?([a-h])?([1-8])?(x)?([a-h][1-8])(=([QRBN]))?
+        var m = Regex.Match(san, @"^([KQRBN])?([a-h])?([1-8])?x?([a-h][1-8])(=([QRBN]))?$", RegexOptions.IgnoreCase);
+        if (m.Success)
+        {
+            char pieceLetter = m.Groups[1].Success ? char.ToUpper(m.Groups[1].Value[0]) : '\0'; // '\0' means pawn
+            char disambFileChar = m.Groups[2].Success ? char.ToLower(m.Groups[2].Value[0]) : '\0';
+            char disambRankChar = m.Groups[3].Success ? m.Groups[3].Value[0] : '\0';
+            string dest = m.Groups[4].Value.ToLower();
+
+            if (!TryParseSquare(dest, out toRow, out toCol)) return false;
+
+            ChessRules.PieceType requiredType = ChessRules.PieceType.Pawn;
+            if (pieceLetter != '\0')
+            {
+                switch (pieceLetter)
+                {
+                    case 'N': requiredType = ChessRules.PieceType.Knight; break;
+                    case 'B': requiredType = ChessRules.PieceType.Bishop; break;
+                    case 'R': requiredType = ChessRules.PieceType.Rook;   break;
+                    case 'Q': requiredType = ChessRules.PieceType.Queen;  break;
+                    case 'K': requiredType = ChessRules.PieceType.King;   break;
+                }
+            }
+
+            // Iterate all pieces of that color and (optional) type; choose first that makes a legal move to dest
+            for (int r=0;r<8;r++)
+            {
+                for (int c=0;c<8;c++)
+                {
+                    var p = chessRules.GetPiece(r,c);
+                    if (p == null || p.type == ChessRules.PieceType.None) continue;
+                    if (p.color != color) continue;
+                    if (pieceLetter != '\0' && p.type != requiredType) continue;
+                    if (pieceLetter == '\0' && p.type != ChessRules.PieceType.Pawn && !(disambFileChar!= '\0' || disambRankChar!='\0'))
+                    {
+                        // If no piece letter provided and it's not a pawn, skip (that's likely an invalid SAN without the piece letter)
+                        continue;
+                    }
+                    if (disambFileChar != '\0' && c != (disambFileChar - 'a')) continue;
+                    if (disambRankChar != '\0' && r != (8 - (disambRankChar - '0'))) continue;
+
+                    if (chessRules.IsValidMove(r, c, toRow, toCol, color))
+                    {
+                        fromRow = r; fromCol = c;
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // Simple destination like "e4" (assume any of our legal pieces can go there; pick the first legal)
+        if (Regex.IsMatch(lowered, @"^[a-h][1-8]$"))
+        {
+            if (!TryParseSquare(lowered, out toRow, out toCol)) return false;
+            for (int r=0;r<8;r++)
+            {
+                for (int c=0;c<8;c++)
+                {
+                    var p = chessRules.GetPiece(r,c);
+                    if (p == null || p.type == ChessRules.PieceType.None) continue;
+                    if (p.color != color) continue;
+                    if (chessRules.IsValidMove(r,c,toRow,toCol,color))
+                    {
+                        fromRow = r; fromCol = c;
+                        return true;
+                    }
+                }
+            }
+        }
 
         return false;
     }
 
-    void ExecuteLocalMove(string move, bool isCastling)
+    void ExecuteLocalCastling(bool kingside)
     {
-        if (isCastling)
-        {
-            bool kingside = move == "O-O";
-            chessRules.ExecuteCastling(localPlayer.color, kingside);
-        }
-        else
-        {
-            // Parse and execute regular move
-            int fromCol = move[0] - 'a';
-            int fromRow = 8 - (move[1] - '0');
-            int toCol = move[2] - 'a';
-            int toRow = 8 - (move[3] - '0');
+        // Build SAN
+        string san = kingside ? "O-O" : "O-O-O";
 
-            chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
-        }
+        // Execute
+        chessRules.ExecuteCastling(localPlayer.color, kingside);
 
-        // Add to move history
-        AddMoveToLog(move, true);
+        // Append check/mate suffix based on opponent after the move
+        var opponent = (localPlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
+        if (chessRules.IsCheckmate(opponent)) san += "#";
+        else if (chessRules.IsInCheck(opponent)) san += "+";
 
-        // Send move to opponent
-        lobbyManager.SendMove(move);
+        // Log and send
+        AddMoveToLog(san, true);
+        lobbyManager.SendMove(kingside ? "O-O" : "O-O-O");
 
         // Switch turns
         chessRules.NextTurn();
         isMyTurn = false;
         moveInputField.interactable = false;
         moveInputField.text = "";
-
         UpdateTurnIndicator();
+        CheckGameState();
+    }
 
-        // Check game state
+    void ExecuteLocalMove(int fromRow, int fromCol, int toRow, int toCol)
+    {
+        // Generate SAN using current board BEFORE making the move
+        string sanCore = GenerateSANCore(fromRow, fromCol, toRow, toCol, localPlayer.color);
+
+        // Execute move on engine
+        chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
+
+        // Append check/mate suffix based on opponent after the move
+        var opponent = (localPlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
+        string san = sanCore;
+        if (chessRules.IsCheckmate(opponent)) san += "#";
+        else if (chessRules.IsInCheck(opponent)) san += "+";
+
+        // Log and send
+        AddMoveToLog(san, true);
+        string coord = SquareToString(fromRow,fromCol) + SquareToString(toRow,toCol);
+        lobbyManager.SendMove(coord);
+
+        // Switch turns
+        chessRules.NextTurn();
+        isMyTurn = false;
+        moveInputField.interactable = false;
+        moveInputField.text = "";
+        UpdateTurnIndicator();
         CheckGameState();
     }
 
@@ -405,36 +433,64 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     {
         if (!gameActive || isMyTurn) return;
 
-        // Execute opponent's move
-        if (move == "O-O" || move == "O-O-O")
+        string upper = move.ToUpper().Replace("0-0-0","O-O-O").Replace("0-0","O-O");
+        if (upper == "O-O" || upper == "O-O-O")
         {
-            bool kingside = move == "O-O";
+            bool kingside = upper == "O-O";
+            // SAN before execute
+            string san = kingside ? "O-O" : "O-O-O";
             chessRules.ExecuteCastling(remotePlayer.color, kingside);
+
+            // Suffix against opponent (local)
+            var opponent = (remotePlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
+            if (chessRules.IsCheckmate(opponent)) san += "#";
+            else if (chessRules.IsInCheck(opponent)) san += "+";
+
+            AddMoveToLog(san, false);
+
+            chessRules.NextTurn();
+            isMyTurn = true;
+            moveInputField.interactable = true;
+            UpdateTurnIndicator();
+            ShowMessage("Your turn!");
+            FocusInput();
+            CheckGameState();
+            return;
         }
-        else
+
+        // Coordinate
+        if (move.Length >= 4)
         {
-            int fromCol = move[0] - 'a';
-            int fromRow = 8 - (move[1] - '0');
-            int toCol = move[2] - 'a';
-            int toRow = 8 - (move[3] - '0');
+            string fromSq = move.Substring(0,2).ToLower();
+            string toSq = move.Substring(2,2).ToLower();
+            if (TryParseSquare(fromSq, out int fr, out int fc) && TryParseSquare(toSq, out int tr, out int tc))
+            {
+                // SAN core from current board BEFORE move
+                string sanCore = GenerateSANCore(fr, fc, tr, tc, remotePlayer.color);
 
-            chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
+                chessRules.ExecuteMove(fr, fc, tr, tc);
+
+                // suffix against opponent (local)
+                var opponent = (remotePlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
+                string san = sanCore;
+                if (chessRules.IsCheckmate(opponent)) san += "#";
+                else if (chessRules.IsInCheck(opponent)) san += "+";
+
+                AddMoveToLog(san, false);
+
+                chessRules.NextTurn();
+                isMyTurn = true;
+                moveInputField.interactable = true;
+
+                UpdateTurnIndicator();
+                ShowMessage("Your turn!");
+                FocusInput();
+                CheckGameState();
+                return;
+            }
         }
 
-        // Add to move history
-        AddMoveToLog(move, false);
-
-        // Switch turns
-        chessRules.NextTurn();
-        isMyTurn = true;
-        moveInputField.interactable = true;
-
-        UpdateTurnIndicator();
-        ShowMessage("Your turn!");
-        FocusInput();
-
-        // Check game state
-        CheckGameState();
+        Debug.LogWarning("Received invalid move from opponent: " + move);
     }
 
     #endregion
@@ -533,7 +589,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
             {
                 if (pieceObjects[row, col] != null)
                 {
-                    Destroy(pieceObjects[row, col]);
+                    GameObject.Destroy(pieceObjects[row, col]);
                     pieceObjects[row, col] = null;
                 }
             }
@@ -635,21 +691,20 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
 
     #region UI Helpers
 
-    void AddMoveToLog(string move, bool isLocal)
+    void AddMoveToLog(string san, bool isLocal)
     {
-        string playerName = isLocal ? localPlayer.playerName : remotePlayer.playerName;
         ChessRules.PieceColor color = isLocal ? localPlayer.color : remotePlayer.color;
 
         if (color == ChessRules.PieceColor.White)
         {
-            moveLogText.text += $"{chessRules.MoveNumber}. {move} ";
+            moveLogText.text += $"{chessRules.MoveNumber}. {san} ";
         }
         else
         {
-            moveLogText.text += $"{move}\n";
+            moveLogText.text += $"{san}\n";
         }
 
-        moveHistory.Add($"{playerName}: {move}");
+        moveHistory.Add(san);
     }
 
     void ShowMessage(string message)
@@ -695,6 +750,135 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         {
             moveInputField.Select();
             moveInputField.ActivateInputField();
+        }
+    }
+
+    // ======== NEW HELPERS: SAN generation & parsing ========
+
+    static bool TryParseSquare(string sq, out int row, out int col)
+    {
+        row = col = -1;
+        if (string.IsNullOrEmpty(sq) || sq.Length != 2) return false;
+        char file = char.ToLower(sq[0]);
+        char rank = sq[1];
+        if (file < 'a' || file > 'h') return false;
+        if (rank < '1' || rank > '8') return false;
+        col = file - 'a';
+        row = 8 - (rank - '0');
+        return true;
+    }
+
+    static string SquareToString(int row, int col)
+    {
+        char file = (char)('a' + col);
+        int rank = 8 - row;
+        return $"{file}{rank}";
+    }
+
+    string GenerateSANCore(int fromRow, int fromCol, int toRow, int toCol, ChessRules.PieceColor mover)
+    {
+        var moving = chessRules.GetPiece(fromRow, fromCol);
+        var targetBefore = chessRules.GetPiece(toRow, toCol);
+
+        // Castling by coords?
+        if (moving != null && moving.type == ChessRules.PieceType.King && Mathf.Abs(toCol - fromCol) == 2)
+        {
+            return toCol == 6 ? "O-O" : "O-O-O";
+        }
+
+        bool isCapture = false;
+        // en passant detection: pawn moves diagonally to empty square
+        if (moving != null && moving.type == ChessRules.PieceType.Pawn && targetBefore == null && fromCol != toCol)
+        {
+            isCapture = true;
+        }
+        else
+        {
+            isCapture = targetBefore != null;
+        }
+
+        string pieceLetter = GetPieceLetter(moving?.type ?? ChessRules.PieceType.None);
+        string disamb = "";
+        if (moving != null && moving.type != ChessRules.PieceType.Pawn)
+        {
+            disamb = GetDisambiguation(moving.type, mover, fromRow, fromCol, toRow, toCol);
+        }
+
+        string dest = SquareToString(toRow, toCol);
+
+        if (moving != null && moving.type == ChessRules.PieceType.Pawn)
+        {
+            if (isCapture)
+            {
+                char fromFile = (char)('a' + fromCol);
+                string san = $"{fromFile}x{dest}";
+                if (toRow == 0 || toRow == 7) san += "=Q";
+                return san;
+            }
+            else
+            {
+                string san = dest;
+                if (toRow == 0 || toRow == 7) san += "=Q";
+                return san;
+            }
+        }
+        else
+        {
+            string san = pieceLetter + disamb + (isCapture ? "x" : "") + dest;
+            return san;
+        }
+    }
+
+    string GetPieceLetter(ChessRules.PieceType type)
+    {
+        switch (type)
+        {
+            case ChessRules.PieceType.Knight: return "N";
+            case ChessRules.PieceType.Bishop: return "B";
+            case ChessRules.PieceType.Rook:   return "R";
+            case ChessRules.PieceType.Queen:  return "Q";
+            case ChessRules.PieceType.King:   return "K";
+            default: return ""; // pawns
+        }
+    }
+
+    string GetDisambiguation(ChessRules.PieceType type, ChessRules.PieceColor mover, int fromRow, int fromCol, int toRow, int toCol)
+    {
+        // Find other same-type pieces that can also move to (toRow,toCol)
+        var candidates = new List<(int r,int c)>();
+        for (int r=0;r<8;r++)
+        {
+            for (int c=0;c<8;c++)
+            {
+                if (r==fromRow && c==fromCol) continue;
+                var p = chessRules.GetPiece(r,c);
+                if (p == null || p.type != type || p.color != mover) continue;
+                if (chessRules.IsValidMove(r,c,toRow,toCol,mover))
+                {
+                    candidates.Add((r,c));
+                }
+            }
+        }
+
+        if (candidates.Count == 0) return "";
+
+        bool anySameFile = candidates.Any(x => x.c == fromCol);
+        bool anySameRank = candidates.Any(x => x.r == fromRow);
+
+        if (!anySameFile)
+        {
+            // file letter is sufficient
+            return ((char)('a' + fromCol)).ToString();
+        }
+        else if (!anySameRank)
+        {
+            // rank number sufficient
+            return (8 - fromRow).ToString();
+        }
+        else
+        {
+            // need both
+            return ((char)('a' + fromCol)).ToString() + (8 - fromRow).ToString();
         }
     }
 

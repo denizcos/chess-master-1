@@ -726,4 +726,225 @@ public class ChessRules : MonoBehaviour
     {
         return isWhiteTurn ? PieceColor.White : PieceColor.Black;
     }
+
+    // ======================================================
+    // === Notation & Input Parsing (UCI + SAN) =============
+    // ======================================================
+
+    // Convert 0-based board coords (row 0 = rank 8) to algebraic like "e4"
+    public static string SquareToString(int row, int col)
+    {
+        char file = (char)('a' + col);
+        int rank = 8 - row;
+        return $"{file}{rank}";
+    }
+
+    // Convert algebraic like "e4" to 0-based (row, col)
+    public static Vector2Int StringToSquare(string sq)
+    {
+        if (string.IsNullOrEmpty(sq) || sq.Length != 2) return new Vector2Int(-1, -1);
+        int col = sq[0] - 'a';
+        if (col < 0 || col > 7) return new Vector2Int(-1, -1);
+        int rank;
+        if (!int.TryParse(sq[1].ToString(), out rank)) return new Vector2Int(-1, -1);
+        if (rank < 1 || rank > 8) return new Vector2Int(-1, -1);
+        int row = 8 - rank;
+        return new Vector2Int(row, col);
+    }
+
+    // UCI: e2e4, e7e8q (promotion char is ignored since we auto-queen)
+    public bool TryParseUCIMove(string input, out (int fromRow,int fromCol,int toRow,int toCol) move)
+    {
+        move = (0,0,0,0);
+        if (string.IsNullOrWhiteSpace(input)) return false;
+        input = input.Trim().ToLower();
+        if (input.Length < 4) return false;
+        Vector2Int from = StringToSquare(input.Substring(0,2));
+        Vector2Int to = StringToSquare(input.Substring(2,2));
+        if (from.x < 0 || to.x < 0) return false;
+        move = (from.x, from.y, to.x, to.y);
+        return true;
+    }
+
+    // Try to parse SAN like e4, Nf3, exd5, O-O, O-O-O, e8=Q, exd8=Q
+    // Strategy: enumerate all legal moves and compare against generated SAN
+    public bool TryParseSANMove(string input, PieceColor sideToMove, out (int fromRow,int fromCol,int toRow,int toCol) move)
+    {
+        move = (0,0,0,0);
+        if (string.IsNullOrWhiteSpace(input)) return false;
+        input = input.Trim();
+        // normalize zero vs letter O, remove check/mate marks, spaces
+        input = input.Replace("0-0-0", "O-O-O").Replace("0-0", "O-O");
+        input = input.Replace("+","" ).Replace("#","" ).Replace(" ","" );
+
+        // Quick handle castle strings
+        if (input == "O-O" || input == "o-o")
+        {
+            int row = sideToMove == PieceColor.White ? 7 : 0;
+            var cand = (row,4,row,6);
+            if (IsValidMove(cand.Item1,cand.Item2,cand.Item3,cand.Item4, sideToMove)) { move = cand; return true; }
+            return false;
+        }
+        if (input == "O-O-O" || input == "o-o-o")
+        {
+            int row = sideToMove == PieceColor.White ? 7 : 0;
+            var cand = (row,4,row,2);
+            if (IsValidMove(cand.Item1,cand.Item2,cand.Item3,cand.Item4, sideToMove)) { move = cand; return true; }
+            return false;
+        }
+
+        // Brute-force: test all legal moves and compare SAN
+        for (int fr=0; fr<8; fr++)
+        {
+            for (int fc=0; fc<8; fc++)
+            {
+                ChessPiece p = boardState[fr,fc];
+                if (p == null || p.color != sideToMove) continue;
+
+                for (int tr=0; tr<8; tr++)
+                {
+                    for (int tc=0; tc<8; tc++)
+                    {
+                        if (!IsValidMove(fr,fc,tr,tc, sideToMove)) continue;
+                        string san = MoveToSAN(fr,fc,tr,tc,p,false);
+                        if (string.Equals(san, input, System.StringComparison.OrdinalIgnoreCase))
+                        {
+                            move = (fr,fc,tr,tc);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    // Build SAN for a given (already legal) move.
+    // - Handles: piece letters, captures (incl. en passant), promotions (=Q only), castling
+    // - Adds '+' / '#' suffixes when the move gives check or checkmate (approx).
+    // - Does NOT implement disambiguation (e.g., Nbd2) – can be added later if needed.
+    public string MoveToSAN(int fromRow,int fromCol,int toRow,int toCol, ChessPiece piece, bool includeSuffix=true)
+    {
+        // Castling
+        if (piece.type == PieceType.King && fromCol == 4 && (toCol == 6 || toCol == 2))
+        {
+            string castle = (toCol == 6) ? "O-O" : "O-O-O";
+            if (!includeSuffix) return castle;
+            SuffixForCheckMate(fromRow,fromCol,toRow,toCol,piece, ref castle);
+            return castle;
+        }
+
+        bool isCapture = false;
+        // Detect en passant capture case
+        if (piece.type == PieceType.Pawn && boardState[toRow,toCol] == null && fromCol != toCol)
+        {
+            if (enPassantTarget.x == toRow && enPassantTarget.y == toCol)
+                isCapture = true;
+        }
+        else
+        {
+            isCapture = boardState[toRow, toCol] != null;
+        }
+
+        string sanCore = "";
+        switch (piece.type)
+        {
+            case PieceType.Pawn:
+                if (isCapture)
+                    sanCore = $"{(char)('a'+fromCol)}x{SquareToString(toRow,toCol)}";
+                else
+                    sanCore = SquareToString(toRow,toCol);
+                // Promotion (auto-queen)
+                if ((toRow == 0 || toRow == 7))
+                    sanCore += "=Q";
+                break;
+
+            case PieceType.Knight: sanCore = "N" + SquareToString(toRow,toCol); break;
+            case PieceType.Bishop: sanCore = "B" + SquareToString(toRow,toCol); break;
+            case PieceType.Rook:   sanCore = "R" + SquareToString(toRow,toCol); break;
+            case PieceType.Queen:  sanCore = "Q" + SquareToString(toRow,toCol); break;
+            case PieceType.King:   sanCore = "K" + SquareToString(toRow,toCol); break;
+        }
+
+        if (piece.type != PieceType.Pawn && isCapture)
+        {
+            // insert 'x' before destination part (last two chars are square)
+            if (sanCore.Length >= 3)
+                sanCore = sanCore.Insert(sanCore.Length - 2, "x");
+            else
+                sanCore += "x";
+        }
+
+        if (!includeSuffix) return sanCore;
+
+        SuffixForCheckMate(fromRow,fromCol,toRow,toCol,piece, ref sanCore);
+        return sanCore;
+    }
+
+    private PieceColor OpponentColor(PieceColor color)
+    {
+        return color == PieceColor.White ? PieceColor.Black : PieceColor.White;
+    }
+
+    private void SuffixForCheckMate(int fromRow,int fromCol,int toRow,int toCol, ChessPiece piece, ref string san)
+    {
+        PieceColor opponent = OpponentColor(piece.color);
+
+        // Save state to undo
+        ChessPiece captured = boardState[toRow,toCol];
+        ChessPiece moving = boardState[fromRow,fromCol];
+        Vector2Int prevEP = enPassantTarget;
+
+        // En passant removal if needed
+        ChessPiece epCaptured = null;
+        int epCapturedRow = -1;
+        bool isEnPassant = false;
+        if (piece.type == PieceType.Pawn && captured == null && fromCol != toCol && enPassantTarget.x == toRow && enPassantTarget.y == toCol)
+        {
+            isEnPassant = true;
+            epCapturedRow = (piece.color == PieceColor.White) ? toRow + 1 : toRow - 1;
+            epCaptured = boardState[epCapturedRow, toCol];
+            boardState[epCapturedRow, toCol] = null;
+        }
+
+        // Make the move on the board (temporary)
+        boardState[toRow,toCol] = moving;
+        boardState[fromRow,fromCol] = null;
+
+        // Handle promotion (just to improve check detection)
+        bool promoted = false;
+        PieceType originalType = moving.type;
+        if (moving.type == PieceType.Pawn && (toRow == 0 || toRow == 7))
+        {
+            moving.type = PieceType.Queen;
+            promoted = true;
+        }
+
+        // Update EP target temporarily if it was a double pawn push
+        enPassantTarget = new Vector2Int(-1,-1);
+        if (originalType == PieceType.Pawn && System.Math.Abs(toRow - fromRow) == 2)
+        {
+            enPassantTarget = new Vector2Int((fromRow + toRow)/2, fromCol);
+        }
+
+        // Evaluate check / mate
+        bool givesCheck = IsInCheck(opponent);
+        bool isMate = false;
+        if (givesCheck)
+        {
+            // Rough mate test: if opponent has no legal moves and is in check
+            isMate = !HasLegalMoves(opponent);
+        }
+
+        // Undo
+        if (promoted) moving.type = originalType;
+        boardState[fromRow,fromCol] = moving;
+        boardState[toRow,toCol] = captured;
+        if (isEnPassant && epCaptured != null)
+            boardState[epCapturedRow, toCol] = epCaptured;
+        enPassantTarget = prevEP;
+
+        if (isMate) san += "#";
+        else if (givesCheck) san += "+";
+    }
 }
