@@ -8,11 +8,11 @@ using Unity.Services.Core;
 using Unity.Services.Authentication;
 using Unity.Services.Lobbies;
 using Unity.Services.Lobbies.Models;
-using Unity.Services.Relay;
-using Unity.Services.Relay.Models;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
 using Unity.Networking.Transport.Relay;
+using Unity.Services.Relay;
+using Unity.Services.Relay.Models;
 using System.Threading.Tasks;
 
 [System.Serializable]
@@ -94,12 +94,21 @@ public class MultiplayerLobbyManager : MonoBehaviour
     public Button directJoinCancelButton;
 
     [Header("Settings")]
-    public float refreshInterval = 5f;
+    public float refreshInterval = 8f; // Increased from 5f to reduce API calls
     public int maxChatMessages = 50;
     public Color readyColor = Color.green;
     public Color notReadyColor = Color.red;
 
     private Dictionary<string, List<string>> lobbyChatMessages = new Dictionary<string, List<string>>();
+
+    // Rate limiting variables
+    private float lastRefreshTime = 0f;
+    public float lastUIUpdateTime = 0f; // Made public for network sync access
+    private float lastHeartbeatTime = 0f;
+    private bool isCreatingLobby = false;
+    private const float MIN_REFRESH_INTERVAL = 3f;
+    private const float MIN_UI_UPDATE_INTERVAL = 1f;
+    private const float MIN_HEARTBEAT_INTERVAL = 20f; // Increased from 15f
 
     // Unity Services variables
     private Lobby currentUnityLobby;
@@ -200,7 +209,7 @@ public class MultiplayerLobbyManager : MonoBehaviour
 
         passwordGroup.SetActive(false);
 
-        // Start auto-refresh if lobby list is active
+        // Start auto-refresh if lobby list is active (with longer interval)
         if (lobbyListPanel.activeSelf)
         {
             StartCoroutine(AutoRefreshLobbyList());
@@ -230,7 +239,7 @@ public class MultiplayerLobbyManager : MonoBehaviour
         while (lobbyListPanel.activeSelf)
         {
             RefreshLobbyList();
-            yield return new WaitForSecondsRealtime(3f); // Refresh every 3 seconds
+            yield return new WaitForSecondsRealtime(refreshInterval); // Increased interval
         }
     }
 
@@ -304,6 +313,16 @@ public class MultiplayerLobbyManager : MonoBehaviour
 
     async void CreateLobby()
     {
+        // Prevent multiple lobby creation attempts
+        if (isCreatingLobby)
+        {
+            Debug.Log("Already creating lobby, please wait...");
+            return;
+        }
+
+        isCreatingLobby = true;
+        confirmCreateButton.interactable = false;
+
         try
         {
             string lobbyName = string.IsNullOrEmpty(lobbyNameInput.text) ?
@@ -382,6 +401,11 @@ public class MultiplayerLobbyManager : MonoBehaviour
             Debug.LogError($"[ERROR] Failed to create lobby: {e.Message}");
             ShowLobbyListPanel();
         }
+        finally
+        {
+            isCreatingLobby = false;
+            confirmCreateButton.interactable = true;
+        }
     }
 
     #endregion
@@ -390,6 +414,15 @@ public class MultiplayerLobbyManager : MonoBehaviour
 
     async void RefreshLobbyList()
     {
+        // Rate limiting for refresh
+        if (Time.time - lastRefreshTime < MIN_REFRESH_INTERVAL)
+        {
+            Debug.Log("Refresh rate limited, skipping...");
+            return;
+        }
+
+        lastRefreshTime = Time.time;
+
         try
         {
             Debug.Log("=== STARTING LOBBY REFRESH ===");
@@ -499,7 +532,8 @@ public class MultiplayerLobbyManager : MonoBehaviour
 
     void OnSearchChanged(string searchText)
     {
-        RefreshLobbyList();
+        // Don't refresh immediately on search to avoid rate limits
+        // Let the auto-refresh handle it
     }
 
     #endregion
@@ -761,6 +795,14 @@ public class MultiplayerLobbyManager : MonoBehaviour
 
     public async void UpdateLobbyRoomUI()
     {
+        // Rate limiting for UI updates
+        if (Time.time - lastUIUpdateTime < MIN_UI_UPDATE_INTERVAL)
+        {
+            return;
+        }
+
+        lastUIUpdateTime = Time.time;
+
         if (currentUnityLobby == null) return;
 
         try
@@ -768,10 +810,32 @@ public class MultiplayerLobbyManager : MonoBehaviour
             // Get the latest lobby state
             currentUnityLobby = await LobbyService.Instance.GetLobbyAsync(currentUnityLobby.Id);
 
+            // Check if lobby still exists and has players
+            if (currentUnityLobby.Players.Count == 0)
+            {
+                HandlePlayerDisconnection("All players have left the lobby.");
+                return;
+            }
+
+            // Check if we're still in the lobby
+            bool stillInLobby = currentUnityLobby.Players.Any(p => p.Id == currentPlayerId);
+            if (!stillInLobby)
+            {
+                HandlePlayerDisconnection("You have been removed from the lobby.");
+                return;
+            }
+
+            // Check if host has left (only one player and we're not the host)
+            if (currentUnityLobby.Players.Count == 1 && !isHost)
+            {
+                HandlePlayerDisconnection("Host has left the lobby. You win!");
+                return;
+            }
+
             lobbyNameText.text = currentUnityLobby.Name;
             lobbyIdText.text = "Code: " + currentUnityLobby.LobbyCode;
 
-            // Find players by color
+            // Find players by color - FIXED APPROACH
             Player whitePlayer = null;
             Player blackPlayer = null;
 
@@ -779,37 +843,47 @@ public class MultiplayerLobbyManager : MonoBehaviour
             {
                 if (player.Data != null && player.Data.ContainsKey("Color"))
                 {
-                    if (player.Data["Color"].Value == "White")
+                    string playerColor = player.Data["Color"].Value;
+                    Debug.Log($"[UI UPDATE] Player {player.Data["PlayerName"].Value} has color {playerColor}");
+
+                    if (playerColor == "White")
                         whitePlayer = player;
-                    else if (player.Data["Color"].Value == "Black")
+                    else if (playerColor == "Black")
                         blackPlayer = player;
                 }
             }
 
-            // Update player 1 (White)
+            // Always update player displays based on their actual colors
+            // Player 1 slot = White player
             if (whitePlayer != null && whitePlayer.Data.ContainsKey("PlayerName"))
             {
-                player1NameText.text = whitePlayer.Data["PlayerName"].Value;
+                string playerName = whitePlayer.Data["PlayerName"].Value;
+                player1NameText.text = $"{playerName} (White)";
                 bool isReady = whitePlayer.Data.ContainsKey("IsReady") && whitePlayer.Data["IsReady"].Value == "true";
                 player1ReadyIndicator.color = isReady ? readyColor : notReadyColor;
+                Debug.Log($"[UI UPDATE] White slot: {playerName} - Ready: {isReady}");
             }
             else
             {
-                player1NameText.text = "Waiting...";
+                player1NameText.text = "Waiting... (White)";
                 player1ReadyIndicator.color = notReadyColor;
+                Debug.Log("[UI UPDATE] White slot: Waiting...");
             }
 
-            // Update player 2 (Black)
+            // Player 2 slot = Black player
             if (blackPlayer != null && blackPlayer.Data.ContainsKey("PlayerName"))
             {
-                player2NameText.text = blackPlayer.Data["PlayerName"].Value;
+                string playerName = blackPlayer.Data["PlayerName"].Value;
+                player2NameText.text = $"{playerName} (Black)";
                 bool isReady = blackPlayer.Data.ContainsKey("IsReady") && blackPlayer.Data["IsReady"].Value == "true";
                 player2ReadyIndicator.color = isReady ? readyColor : notReadyColor;
+                Debug.Log($"[UI UPDATE] Black slot: {playerName} - Ready: {isReady}");
             }
             else
             {
-                player2NameText.text = "Waiting...";
+                player2NameText.text = "Waiting... (Black)";
                 player2ReadyIndicator.color = notReadyColor;
+                Debug.Log("[UI UPDATE] Black slot: Waiting...");
             }
 
             // Check if both players are ready
@@ -826,7 +900,7 @@ public class MultiplayerLobbyManager : MonoBehaviour
             startGameButton.interactable = isHost && bothReady;
             colorSwapButton.interactable = isHost && currentUnityLobby.Players.Count == 2;
 
-            // Update ready button text
+            // Update ready button text and local player data
             TMP_Text readyButtonText = readyButton.GetComponentInChildren<TMP_Text>();
             if (readyButtonText != null)
             {
@@ -834,8 +908,17 @@ public class MultiplayerLobbyManager : MonoBehaviour
                 bool isReady = myPlayer != null && myPlayer.Data.ContainsKey("IsReady") && myPlayer.Data["IsReady"].Value == "true";
                 readyButtonText.text = isReady ? "Not Ready" : "Ready";
 
-                if (localPlayer != null)
+                // Update local player data
+                if (localPlayer != null && myPlayer != null)
+                {
                     localPlayer.isReady = isReady;
+                    if (myPlayer.Data.ContainsKey("Color"))
+                    {
+                        string myColor = myPlayer.Data["Color"].Value;
+                        localPlayer.color = myColor == "White" ? ChessRules.PieceColor.White : ChessRules.PieceColor.Black;
+                        Debug.Log($"[UI UPDATE] Updated local player {localPlayer.playerName} to color {localPlayer.color}");
+                    }
+                }
             }
 
             // Update remote player data
@@ -851,16 +934,69 @@ public class MultiplayerLobbyManager : MonoBehaviour
                     color = otherPlayer.Data.ContainsKey("Color") && otherPlayer.Data["Color"].Value == "White" ?
                         ChessRules.PieceColor.White : ChessRules.PieceColor.Black
                 };
+                Debug.Log($"[UI UPDATE] Updated remote player {remotePlayer.playerName} to color {remotePlayer.color}");
             }
             else
             {
                 remotePlayer = null;
             }
         }
+        catch (LobbyServiceException e)
+        {
+            if (e.Reason == LobbyExceptionReason.LobbyNotFound)
+            {
+                HandlePlayerDisconnection("Lobby no longer exists.");
+            }
+            else
+            {
+                Debug.LogError($"Failed to update lobby UI: {e.Message}");
+            }
+        }
         catch (System.Exception e)
         {
             Debug.LogError($"Failed to update lobby UI: {e.Message}");
         }
+    }
+
+    void HandlePlayerDisconnection(string message)
+    {
+        Debug.Log($"[DISCONNECT] {message}");
+
+        // If we're in a game, end it
+        if (gamePanel.activeSelf && multiplayerUI != null)
+        {
+            multiplayerUI.EndGame($"Opponent disconnected. You win!");
+        }
+
+        // Show message and return to lobby list
+        AddChatMessage("System", message);
+
+        // Clean up and return to lobby list
+        StartCoroutine(DelayedReturnToLobbyList(message));
+    }
+
+    IEnumerator DelayedReturnToLobbyList(string message)
+    {
+        yield return new WaitForSeconds(2f); // Give time to read the message
+
+        // Clean up network
+        if (NetworkManager.Singleton.IsHost)
+        {
+            NetworkManager.Singleton.Shutdown();
+        }
+        else if (NetworkManager.Singleton.IsClient)
+        {
+            NetworkManager.Singleton.Shutdown();
+        }
+
+        // Reset lobby state
+        currentUnityLobby = null;
+        currentLobbyId = null;
+        StopLobbyHeartbeat();
+        StopLobbyPolling();
+
+        // Return to lobby list
+        ShowLobbyListPanel();
     }
 
     async void ToggleReady()
@@ -907,54 +1043,15 @@ public class MultiplayerLobbyManager : MonoBehaviour
 
         try
         {
-            // Get both players
-            var player1 = currentUnityLobby.Players[0];
-            var player2 = currentUnityLobby.Players[1];
+            Debug.Log("[COLOR SWAP] Host initiating color swap via network");
 
-            // Swap their colors
-            string player1NewColor = player1.Data["Color"].Value == "White" ? "Black" : "White";
-            string player2NewColor = player2.Data["Color"].Value == "White" ? "Black" : "White";
-
-            // Update player 1
-            UpdatePlayerOptions options1 = new UpdatePlayerOptions
-            {
-                Data = new Dictionary<string, PlayerDataObject>
-                {
-                    { "PlayerName", player1.Data["PlayerName"] },
-                    { "IsReady", player1.Data["IsReady"] },
-                    { "Color", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, player1NewColor) }
-                }
-            };
-
-            await LobbyService.Instance.UpdatePlayerAsync(currentUnityLobby.Id, player1.Id, options1);
-
-            // Update player 2
-            UpdatePlayerOptions options2 = new UpdatePlayerOptions
-            {
-                Data = new Dictionary<string, PlayerDataObject>
-                {
-                    { "PlayerName", player2.Data["PlayerName"] },
-                    { "IsReady", player2.Data["IsReady"] },
-                    { "Color", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, player2NewColor) }
-                }
-            };
-
-            await LobbyService.Instance.UpdatePlayerAsync(currentUnityLobby.Id, player2.Id, options2);
-
-            // Update local player data if needed
-            if (localPlayer != null)
-            {
-                localPlayer.color = localPlayer.color == ChessRules.PieceColor.White ?
-                    ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
-            }
-
-            // Notify via network sync if available
+            // Instead of trying to update Unity Lobby directly (which fails),
+            // we'll use our network system to handle the swap
             if (networkSync != null)
             {
                 networkSync.RequestColorSwap();
             }
 
-            UpdateLobbyRoomUI();
             AddChatMessage("System", "Colors swapped!");
         }
         catch (System.Exception e)
@@ -1020,7 +1117,7 @@ public class MultiplayerLobbyManager : MonoBehaviour
     {
         while (currentUnityLobby != null)
         {
-            yield return new WaitForSecondsRealtime(2f); // Poll every 2 seconds
+            yield return new WaitForSecondsRealtime(3f); // Increased polling interval
             UpdateLobbyRoomUI();
         }
     }
@@ -1045,8 +1142,14 @@ public class MultiplayerLobbyManager : MonoBehaviour
     {
         while (currentUnityLobby != null && isHost)
         {
-            yield return new WaitForSecondsRealtime(15f);
-            HeartbeatLobbyAsync();
+            yield return new WaitForSecondsRealtime(MIN_HEARTBEAT_INTERVAL);
+
+            // Rate limit heartbeat
+            if (Time.time - lastHeartbeatTime >= MIN_HEARTBEAT_INTERVAL)
+            {
+                lastHeartbeatTime = Time.time;
+                HeartbeatLobbyAsync();
+            }
         }
     }
 
@@ -1144,8 +1247,11 @@ public class MultiplayerLobbyManager : MonoBehaviour
 
     public void SwapPlayerColors()
     {
+        Debug.Log("[COLOR SWAP] SwapPlayerColors called");
+
         if (localPlayer != null)
         {
+            Debug.Log($"[COLOR SWAP] Before: Local player {localPlayer.playerName} is {localPlayer.color}");
             var newLocalColor = localPlayer.color == ChessRules.PieceColor.White ?
                 ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
 
@@ -1157,10 +1263,12 @@ public class MultiplayerLobbyManager : MonoBehaviour
                 isReady = localPlayer.isReady,
                 color = newLocalColor
             };
+            Debug.Log($"[COLOR SWAP] After: Local player {localPlayer.playerName} is now {localPlayer.color}");
         }
 
         if (remotePlayer != null)
         {
+            Debug.Log($"[COLOR SWAP] Before: Remote player {remotePlayer.playerName} is {remotePlayer.color}");
             var newRemoteColor = remotePlayer.color == ChessRules.PieceColor.White ?
                 ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
 
@@ -1172,9 +1280,37 @@ public class MultiplayerLobbyManager : MonoBehaviour
                 isReady = remotePlayer.isReady,
                 color = newRemoteColor
             };
+            Debug.Log($"[COLOR SWAP] After: Remote player {remotePlayer.playerName} is now {remotePlayer.color}");
         }
 
-        UpdateLobbyRoomUI();
+        // Force immediate UI update
+        Debug.Log("[COLOR SWAP] Forcing UI update");
+        UpdateDisplayedPlayerSlots();
+    }
+
+    void UpdateDisplayedPlayerSlots()
+    {
+        // Update the UI display based on current player colors
+        if (localPlayer != null && remotePlayer != null)
+        {
+            if (localPlayer.color == ChessRules.PieceColor.White)
+            {
+                // Local player is white (slot 1), remote is black (slot 2)
+                player1NameText.text = $"{localPlayer.playerName} (White)";
+                player2NameText.text = $"{remotePlayer.playerName} (Black)";
+                player1ReadyIndicator.color = localPlayer.isReady ? readyColor : notReadyColor;
+                player2ReadyIndicator.color = remotePlayer.isReady ? readyColor : notReadyColor;
+            }
+            else
+            {
+                // Local player is black (slot 2), remote is white (slot 1)
+                player1NameText.text = $"{remotePlayer.playerName} (White)";
+                player2NameText.text = $"{localPlayer.playerName} (Black)";
+                player1ReadyIndicator.color = remotePlayer.isReady ? readyColor : notReadyColor;
+                player2ReadyIndicator.color = localPlayer.isReady ? readyColor : notReadyColor;
+            }
+            Debug.Log($"[COLOR SWAP] UI Updated - Player1: {player1NameText.text}, Player2: {player2NameText.text}");
+        }
     }
 
     #endregion

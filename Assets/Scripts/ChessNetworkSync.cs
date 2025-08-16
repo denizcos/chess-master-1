@@ -71,11 +71,12 @@ public class ChessNetworkSync : NetworkBehaviour
         }
     }
 
-    // Color swap (host only)
+    // Color swap (host only) - IMPROVED VERSION
     public void RequestColorSwap()
     {
         if (IsHost)
         {
+            Debug.Log("[NETWORK] Host requesting color swap");
             SwapColorsClientRpc();
         }
     }
@@ -83,12 +84,26 @@ public class ChessNetworkSync : NetworkBehaviour
     [ClientRpc]
     void SwapColorsClientRpc()
     {
+        Debug.Log("[NETWORK] Received color swap request");
+
         // Update local player colors using the new method
         if (lobbyManager != null)
         {
             lobbyManager.SwapPlayerColors();
+            Debug.Log("[NETWORK] Player colors swapped locally");
 
-            // Refresh UI
+            // Force UI refresh after a short delay
+            lobbyManager.StartCoroutine(DelayedUIUpdateAfterSwap());
+        }
+    }
+
+    System.Collections.IEnumerator DelayedUIUpdateAfterSwap()
+    {
+        yield return new WaitForSeconds(0.5f);
+        if (lobbyManager != null)
+        {
+            Debug.Log("[NETWORK] Updating UI after color swap");
+            lobbyManager.lastUIUpdateTime = 0f; // Reset rate limiting
             lobbyManager.UpdateLobbyRoomUI();
         }
     }
@@ -173,7 +188,7 @@ public class ChessNetworkSync : NetworkBehaviour
     {
         if (IsServer)
         {
-            // Notify other players
+            // Notify other players about disconnection
             PlayerDisconnectedClientRpc();
         }
 
@@ -185,7 +200,48 @@ public class ChessNetworkSync : NetworkBehaviour
     {
         if (lobbyManager != null)
         {
-            lobbyManager.AddChatMessage("System", "Opponent disconnected!");
+            lobbyManager.AddChatMessage("System", "A player disconnected!");
+
+            // If we're in game, end it with a win for remaining player
+            if (lobbyManager.gamePanel.activeSelf)
+            {
+                lobbyManager.EndGame("Opponent disconnected. You win!");
+            }
+        }
+    }
+
+    // Network manager events
+    void OnEnable()
+    {
+        if (NetworkManager.Singleton != null)
+        {
+            NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
+        }
+    }
+
+    void OnDisable()
+    {
+        if (NetworkManager.Singleton != null)
+        {
+            NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
+        }
+    }
+
+    void OnClientDisconnected(ulong clientId)
+    {
+        Debug.Log($"[NETWORK] Client {clientId} disconnected");
+
+        // If opponent disconnected during game
+        if (multiplayerUI != null && lobbyManager != null)
+        {
+            if (lobbyManager.gamePanel.activeSelf)
+            {
+                multiplayerUI.EndGame("Opponent disconnected. You win!");
+            }
+            else
+            {
+                lobbyManager.AddChatMessage("System", "Opponent disconnected!");
+            }
         }
     }
 
@@ -211,6 +267,163 @@ public class ChessNetworkSync : NetworkBehaviour
         if (lobbyManager != null)
         {
             lobbyManager.UpdateLobbyRoomUI();
+        }
+    }
+
+    // Resignation handling
+    public void SendResign(string playerName)
+    {
+        if (IsClient)
+        {
+            SendResignServerRpc(playerName);
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    void SendResignServerRpc(string playerName, ServerRpcParams rpcParams = default)
+    {
+        // Broadcast to all clients
+        ReceiveResignClientRpc(playerName, rpcParams.Receive.SenderClientId);
+    }
+
+    [ClientRpc]
+    void ReceiveResignClientRpc(string playerName, ulong senderId)
+    {
+        Debug.Log($"[NETWORK] Player {playerName} resigned (sender ID: {senderId})");
+
+        bool isLocalPlayerResigning = NetworkManager.Singleton.LocalClientId == senderId;
+
+        // End the game for both players
+        if (multiplayerUI != null && lobbyManager != null && lobbyManager.gamePanel.activeSelf)
+        {
+            if (isLocalPlayerResigning)
+            {
+                // For the resigner, show they resigned
+                string opponentName = lobbyManager.remotePlayer != null ? lobbyManager.remotePlayer.playerName : "Opponent";
+                multiplayerUI.EndGame($"You resigned. {opponentName} wins!");
+            }
+            else
+            {
+                // For the opponent, show the other player resigned
+                multiplayerUI.EndGame($"{playerName} resigned. You win!");
+            }
+        }
+
+        // Add chat message
+        if (lobbyManager != null)
+        {
+            string winner = isLocalPlayerResigning ? "Opponent" : "You";
+            string result = $"{playerName} resigned. {winner} won!";
+            lobbyManager.AddChatMessage("System", result);
+        }
+
+        // Call the UI method for any additional processing
+        if (multiplayerUI != null)
+        {
+            multiplayerUI.OnPlayerResigned(playerName, isLocalPlayerResigning);
+        }
+    }
+
+    // SIMPLIFIED DRAW OFFER SYSTEM
+
+    // Send draw offer
+    public void SendDrawOffer(string playerName)
+    {
+        if (IsClient)
+        {
+            SendDrawOfferServerRpc(playerName);
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    void SendDrawOfferServerRpc(string playerName, ServerRpcParams rpcParams = default)
+    {
+        // Broadcast to all clients except sender
+        ReceiveDrawOfferClientRpc(playerName, rpcParams.Receive.SenderClientId);
+    }
+
+    [ClientRpc]
+    void ReceiveDrawOfferClientRpc(string playerName, ulong senderId)
+    {
+        // Don't process our own draw offers
+        if (NetworkManager.Singleton.LocalClientId == senderId)
+            return;
+
+        // Show draw offer to opponent
+        if (multiplayerUI != null)
+        {
+            multiplayerUI.OnDrawOfferReceived(playerName);
+        }
+
+        if (lobbyManager != null)
+        {
+            lobbyManager.AddChatMessage("System", $"{playerName} offered a draw.");
+        }
+    }
+
+    // Send draw acceptance
+    public void SendDrawAccept(string playerName)
+    {
+        if (IsClient)
+        {
+            SendDrawAcceptServerRpc(playerName);
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    void SendDrawAcceptServerRpc(string playerName, ServerRpcParams rpcParams = default)
+    {
+        // Broadcast to all clients
+        ReceiveDrawAcceptClientRpc(playerName);
+    }
+
+    [ClientRpc]
+    void ReceiveDrawAcceptClientRpc(string playerName)
+    {
+        // Process draw acceptance for all clients - let UI handle the game ending
+        if (multiplayerUI != null)
+        {
+            multiplayerUI.OnDrawAccepted();
+        }
+
+        if (lobbyManager != null)
+        {
+            lobbyManager.AddChatMessage("System", $"{playerName} accepted the draw.");
+        }
+    }
+
+    // Send draw decline - SIMPLIFIED (automatic decline when move is made)
+    public void SendDrawDecline(string playerName)
+    {
+        if (IsClient)
+        {
+            SendDrawDeclineServerRpc(playerName);
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    void SendDrawDeclineServerRpc(string playerName, ServerRpcParams rpcParams = default)
+    {
+        // Broadcast to all clients except sender
+        ReceiveDrawDeclineClientRpc(playerName, rpcParams.Receive.SenderClientId);
+    }
+
+    [ClientRpc]
+    void ReceiveDrawDeclineClientRpc(string playerName, ulong senderId)
+    {
+        // Don't process our own decline
+        if (NetworkManager.Singleton.LocalClientId == senderId)
+            return;
+
+        // Notify original draw offerer
+        if (multiplayerUI != null)
+        {
+            multiplayerUI.OnDrawDeclined();
+        }
+
+        if (lobbyManager != null)
+        {
+            lobbyManager.AddChatMessage("System", $"{playerName} declined the draw offer.");
         }
     }
 }

@@ -5,6 +5,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Linq;
+using System.IO;
 
 public class BlindfoldMultiplayerUI : MonoBehaviour
 {
@@ -18,9 +19,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     public Button revealBoardButton;
     public Button resignButton;
     public Button drawOfferButton;
-    public GameObject drawPromptPanel;
-    public Button acceptDrawButton;
-    public Button declineDrawButton;
+    public Button saveLogButton;
 
     [Header("Player Info")]
     public TMP_Text localPlayerNameText;
@@ -52,13 +51,16 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     public float errorMessageDuration = 3f;
     public Color activePlayerColor = Color.green;
     public Color inactivePlayerColor = Color.gray;
-    public Vector2 pieceSize = new Vector2(60f, 60f);
+    public Vector2 pieceSize = new Vector2(80f, 80f); // Increased from 60f to 80f
+    public float boardScaleFactor = 1.2f; // Reduced scale to stay within boundaries
+    public Vector2 boardPositionOffset = new Vector2(0f, -200f); // Move board much further down
 
     // Game components
     private ChessRules chessRules;
     private MultiplayerLobbyManager lobbyManager;
     private PlayerData localPlayer;
     private PlayerData remotePlayer;
+    private ChessNetworkSync networkSync;
 
     // Game state
     private GameObject[,] pieceObjects = new GameObject[8, 8];
@@ -67,7 +69,11 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     private List<string> moveHistory = new List<string>();
     private bool isMyTurn;
     private bool gameActive;
-    private bool drawOffered;
+
+    // Draw offer state - simplified
+    private bool drawOfferReceived = false;
+    private bool drawOfferSent = false;
+
     private float gameTimer = 0f;
 
     // Board colors
@@ -80,6 +86,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         localPlayer = local;
         remotePlayer = remote;
         lobbyManager = lobby;
+        networkSync = FindFirstObjectByType<ChessNetworkSync>();
 
         SetupUI();
         SetupBoard();
@@ -107,17 +114,13 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         resignButton.onClick.AddListener(Resign);
 
         drawOfferButton.onClick.RemoveAllListeners();
-        drawOfferButton.onClick.AddListener(OfferDraw);
+        drawOfferButton.onClick.AddListener(HandleDrawButton);
 
-        acceptDrawButton.onClick.RemoveAllListeners();
-        acceptDrawButton.onClick.AddListener(AcceptDraw);
-
-        declineDrawButton.onClick.RemoveAllListeners();
-        declineDrawButton.onClick.AddListener(DeclineDraw);
+        saveLogButton.onClick.RemoveAllListeners();
+        saveLogButton.onClick.AddListener(OnSaveLogClicked);
 
         // Hide board initially
         chessBoardObject.SetActive(false);
-        drawPromptPanel.SetActive(false);
 
         // Initialize reveal count
         currentRevealCount = maxRevealCount;
@@ -126,6 +129,9 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         // Clear move log
         moveLogText.text = "=== Blindfold Chess Match ===\n";
         moveLogText.text += $"{localPlayer.playerName} vs {remotePlayer.playerName}\n\n";
+
+        // Initialize draw button
+        UpdateDrawButtonText();
     }
 
     void SetupBoard()
@@ -167,7 +173,8 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         // Set initial turn
         isMyTurn = localPlayer.color == ChessRules.PieceColor.White;
         gameActive = true;
-        drawOffered = false;
+        drawOfferReceived = false;
+        drawOfferSent = false;
 
         UpdateTurnIndicator();
 
@@ -247,7 +254,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         }
 
         // Castling keywords handled first
-        string upperMove = moveNotation.ToUpper().Replace("0-0-0","O-O-O").Replace("0-0","O-O");
+        string upperMove = moveNotation.ToUpper().Replace("0-0-0", "O-O-O").Replace("0-0", "O-O");
         if (upperMove == "O-O" || upperMove == "O-O-O")
         {
             bool kingside = upperMove == "O-O";
@@ -290,15 +297,15 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         // Coordinate "e2e4"
         if (Regex.IsMatch(lowered, @"^[a-h][1-8][a-h][1-8]$"))
         {
-            if (!TryParseSquare(lowered.Substring(0,2), out fromRow, out fromCol)) return false;
-            if (!TryParseSquare(lowered.Substring(2,2), out toRow, out toCol)) return false;
+            if (!TryParseSquare(lowered.Substring(0, 2), out fromRow, out fromCol)) return false;
+            if (!TryParseSquare(lowered.Substring(2, 2), out toRow, out toCol)) return false;
             if (!chessRules.IsValidMove(fromRow, fromCol, toRow, toCol, color)) return false;
             return true;
         }
 
         // Normalize: remove spaces and check/mate marks; keep 'x' and '=' for our own use
         string san = clean.Replace(" ", "").Replace("+", "").Replace("#", "");
-        san = san.Replace("0-0-0","O-O-O").Replace("0-0","O-O");
+        san = san.Replace("0-0-0", "O-O-O").Replace("0-0", "O-O");
 
         // Try SAN like Nf3, exd5, e4, Qxe7, Nbd2, R1e1, e8=Q, exd8=Q
         // Pattern: ([KQRBN])?([a-h])?([1-8])?(x)?([a-h][1-8])(=([QRBN]))?
@@ -319,22 +326,22 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
                 {
                     case 'N': requiredType = ChessRules.PieceType.Knight; break;
                     case 'B': requiredType = ChessRules.PieceType.Bishop; break;
-                    case 'R': requiredType = ChessRules.PieceType.Rook;   break;
-                    case 'Q': requiredType = ChessRules.PieceType.Queen;  break;
-                    case 'K': requiredType = ChessRules.PieceType.King;   break;
+                    case 'R': requiredType = ChessRules.PieceType.Rook; break;
+                    case 'Q': requiredType = ChessRules.PieceType.Queen; break;
+                    case 'K': requiredType = ChessRules.PieceType.King; break;
                 }
             }
 
             // Iterate all pieces of that color and (optional) type; choose first that makes a legal move to dest
-            for (int r=0;r<8;r++)
+            for (int r = 0; r < 8; r++)
             {
-                for (int c=0;c<8;c++)
+                for (int c = 0; c < 8; c++)
                 {
-                    var p = chessRules.GetPiece(r,c);
+                    var p = chessRules.GetPiece(r, c);
                     if (p == null || p.type == ChessRules.PieceType.None) continue;
                     if (p.color != color) continue;
                     if (pieceLetter != '\0' && p.type != requiredType) continue;
-                    if (pieceLetter == '\0' && p.type != ChessRules.PieceType.Pawn && !(disambFileChar!= '\0' || disambRankChar!='\0'))
+                    if (pieceLetter == '\0' && p.type != ChessRules.PieceType.Pawn && !(disambFileChar != '\0' || disambRankChar != '\0'))
                     {
                         // If no piece letter provided and it's not a pawn, skip (that's likely an invalid SAN without the piece letter)
                         continue;
@@ -356,14 +363,14 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         if (Regex.IsMatch(lowered, @"^[a-h][1-8]$"))
         {
             if (!TryParseSquare(lowered, out toRow, out toCol)) return false;
-            for (int r=0;r<8;r++)
+            for (int r = 0; r < 8; r++)
             {
-                for (int c=0;c<8;c++)
+                for (int c = 0; c < 8; c++)
                 {
-                    var p = chessRules.GetPiece(r,c);
+                    var p = chessRules.GetPiece(r, c);
                     if (p == null || p.type == ChessRules.PieceType.None) continue;
                     if (p.color != color) continue;
-                    if (chessRules.IsValidMove(r,c,toRow,toCol,color))
+                    if (chessRules.IsValidMove(r, c, toRow, toCol, color))
                     {
                         fromRow = r; fromCol = c;
                         return true;
@@ -382,6 +389,9 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
 
         // Execute
         chessRules.ExecuteCastling(localPlayer.color, kingside);
+
+        // Cancel any draw offers when we make a move
+        CancelDrawOffers();
 
         // Append check/mate suffix based on opponent after the move
         var opponent = (localPlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
@@ -409,6 +419,9 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         // Execute move on engine
         chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
 
+        // Cancel any draw offers when we make a move
+        CancelDrawOffers();
+
         // Append check/mate suffix based on opponent after the move
         var opponent = (localPlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
         string san = sanCore;
@@ -417,7 +430,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
 
         // Log and send
         AddMoveToLog(san, true);
-        string coord = SquareToString(fromRow,fromCol) + SquareToString(toRow,toCol);
+        string coord = SquareToString(fromRow, fromCol) + SquareToString(toRow, toCol);
         lobbyManager.SendMove(coord);
 
         // Switch turns
@@ -431,9 +444,12 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
 
     public void OnRemoteMoveReceived(string move)
     {
+        // Cancel any draw offers when a move is made
+        CancelDrawOffers();
+
         if (!gameActive || isMyTurn) return;
 
-        string upper = move.ToUpper().Replace("0-0-0","O-O-O").Replace("0-0","O-O");
+        string upper = move.ToUpper().Replace("0-0-0", "O-O-O").Replace("0-0", "O-O");
         if (upper == "O-O" || upper == "O-O-O")
         {
             bool kingside = upper == "O-O";
@@ -461,8 +477,8 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         // Coordinate
         if (move.Length >= 4)
         {
-            string fromSq = move.Substring(0,2).ToLower();
-            string toSq = move.Substring(2,2).ToLower();
+            string fromSq = move.Substring(0, 2).ToLower();
+            string toSq = move.Substring(2, 2).ToLower();
             if (TryParseSquare(fromSq, out int fr, out int fc) && TryParseSquare(toSq, out int tr, out int tc))
             {
                 // SAN core from current board BEFORE move
@@ -509,11 +525,37 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     IEnumerator RevealBoardTemporarily()
     {
         chessBoardObject.SetActive(true);
+
+        // Store original scale and position
+        Vector3 originalScale = chessBoardObject.transform.localScale;
+        Vector2 originalPosition = Vector2.zero;
+
+        RectTransform boardRect = chessBoardObject.transform as RectTransform;
+        if (boardRect != null)
+        {
+            originalPosition = boardRect.anchoredPosition;
+            // Apply scale and position offset
+            boardRect.localScale = new Vector3(boardScaleFactor, boardScaleFactor, 1f);
+            boardRect.anchoredPosition = originalPosition + boardPositionOffset;
+        }
+        else
+        {
+            chessBoardObject.transform.localScale = new Vector3(boardScaleFactor, boardScaleFactor, 1f);
+        }
+
         SpawnAllPieces();
 
         yield return new WaitForSeconds(revealDuration);
 
         ClearPieces();
+
+        // Restore original scale and position
+        chessBoardObject.transform.localScale = originalScale;
+        if (boardRect != null)
+        {
+            boardRect.anchoredPosition = originalPosition;
+        }
+
         chessBoardObject.SetActive(false);
     }
 
@@ -613,6 +655,96 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
 
     #endregion
 
+    #region Draw Offer System - Simplified
+
+    void HandleDrawButton()
+    {
+        if (!gameActive) return;
+
+        if (drawOfferReceived)
+        {
+            // Accept the received draw offer
+            AcceptDraw();
+        }
+        else
+        {
+            // Send our own draw offer
+            OfferDraw();
+        }
+    }
+
+    void OfferDraw()
+    {
+        if (drawOfferSent) return; // Already sent
+
+        drawOfferSent = true;
+        UpdateDrawButtonText();
+
+        // Send draw offer through network
+        if (networkSync != null)
+        {
+            networkSync.SendDrawOffer(localPlayer.playerName);
+        }
+
+        ShowMessage("Draw offer sent to opponent.");
+    }
+
+    void AcceptDraw()
+    {
+        if (!drawOfferReceived) return;
+
+        // Send acceptance through network
+        if (networkSync != null)
+        {
+            networkSync.SendDrawAccept(localPlayer.playerName);
+        }
+
+        // Reset draw states
+        drawOfferReceived = false;
+        drawOfferSent = false;
+        UpdateDrawButtonText();
+    }
+
+    void CancelDrawOffers()
+    {
+        if (drawOfferSent || drawOfferReceived)
+        {
+            drawOfferSent = false;
+            drawOfferReceived = false;
+            UpdateDrawButtonText();
+
+            if (drawOfferSent)
+            {
+                ShowMessage("Draw offer canceled due to move.");
+            }
+        }
+    }
+
+    void UpdateDrawButtonText()
+    {
+        TMP_Text buttonText = drawOfferButton.GetComponentInChildren<TMP_Text>();
+        if (buttonText != null)
+        {
+            if (drawOfferReceived)
+            {
+                buttonText.text = "Accept Draw";
+                drawOfferButton.interactable = true;
+            }
+            else if (drawOfferSent)
+            {
+                buttonText.text = "Draw Offered";
+                drawOfferButton.interactable = false;
+            }
+            else
+            {
+                buttonText.text = "Offer Draw";
+                drawOfferButton.interactable = true;
+            }
+        }
+    }
+
+    #endregion
+
     #region Game State Management
 
     void CheckGameState()
@@ -647,44 +779,207 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     {
         if (!gameActive) return;
 
-        EndGame($"{localPlayer.playerName} resigned. {remotePlayer.playerName} wins!");
-        lobbyManager.SendGameMessage("I resign.");
+        Debug.Log($"[RESIGN] {localPlayer.playerName} is resigning");
+
+        // Send resignation through network first (this will handle the game ending)
+        if (networkSync != null)
+        {
+            networkSync.SendResign(localPlayer.playerName);
+        }
+
+        // Note: Game ending is now handled in the network response to ensure both players see it
     }
 
-    void OfferDraw()
-    {
-        if (!gameActive || drawOffered) return;
-
-        drawOffered = true;
-        drawOfferButton.interactable = false;
-        lobbyManager.SendGameMessage("Draw offer sent.");
-        ShowMessage("Draw offer sent to opponent.");
-    }
-
-    void AcceptDraw()
-    {
-        drawPromptPanel.SetActive(false);
-        EndGame("Game drawn by agreement.");
-        lobbyManager.SendGameMessage("Draw accepted.");
-    }
-
-    void DeclineDraw()
-    {
-        drawPromptPanel.SetActive(false);
-        lobbyManager.SendGameMessage("Draw declined.");
-        ShowMessage("Draw offer declined.");
-    }
-
-    void EndGame(string result)
+    public void EndGame(string result)
     {
         gameActive = false;
         moveInputField.interactable = false;
+        drawOfferSent = false;
+        drawOfferReceived = false;
+        UpdateDrawButtonText();
+
+        // Clear turn indicator when game ends
+        turnIndicatorText.text = "GAME OVER";
+        turnIndicatorText.color = Color.yellow;
+        localPlayerIndicator.color = inactivePlayerColor;
+        remotePlayerIndicator.color = inactivePlayerColor;
+
+        // Reveal board permanently when game ends
+        RevealBoardPermanently();
 
         moveLogText.text += $"\n\n=== GAME OVER ===\n{result}\n";
         ShowMessage(result);
 
         // Notify lobby manager
         lobbyManager.EndGame(result);
+    }
+
+    void RevealBoardPermanently()
+    {
+        Debug.Log("[GAME END] Revealing board permanently");
+        chessBoardObject.SetActive(true);
+
+        // Apply scale and position for better visibility
+        Vector3 originalScale = chessBoardObject.transform.localScale;
+        RectTransform boardRect = chessBoardObject.transform as RectTransform;
+        Vector2 originalPosition = Vector2.zero;
+
+        if (boardRect != null)
+        {
+            originalPosition = boardRect.anchoredPosition;
+            boardRect.localScale = new Vector3(boardScaleFactor, boardScaleFactor, 1f);
+            boardRect.anchoredPosition = originalPosition + boardPositionOffset;
+        }
+        else
+        {
+            chessBoardObject.transform.localScale = new Vector3(boardScaleFactor, boardScaleFactor, 1f);
+        }
+
+        SpawnAllPieces();
+
+        // Update reveal button to show board is permanently visible
+        UpdateRevealButtonForGameEnd();
+    }
+
+    void UpdateRevealButtonForGameEnd()
+    {
+        TMP_Text buttonText = revealBoardButton.GetComponentInChildren<TMP_Text>();
+        if (buttonText != null)
+        {
+            buttonText.text = "Board Revealed";
+            revealBoardButton.interactable = false;
+        }
+    }
+
+    #endregion
+
+    #region Network Integration Methods
+
+    public void OnPlayerResigned(string resigningPlayerName, bool isLocalPlayer)
+    {
+        // Game ends for both players - EndGame call is handled by ChessNetworkSync
+    }
+
+    public void OnDrawOfferReceived(string offererName)
+    {
+        drawOfferReceived = true;
+        UpdateDrawButtonText();
+        ShowMessage($"{offererName} offers a draw.");
+    }
+
+    public void OnDrawAccepted()
+    {
+        drawOfferSent = false;
+        drawOfferReceived = false;
+        UpdateDrawButtonText();
+
+        // Actually end the game here
+        EndGame("Game ended in a draw by agreement!");
+    }
+
+    public void OnDrawDeclined()
+    {
+        drawOfferSent = false;
+        UpdateDrawButtonText();
+        ShowMessage("Your draw offer was declined.");
+    }
+
+    #endregion
+
+    #region Save Log Functionality
+
+    public void OnSaveLogClicked()
+    {
+        string logText = moveLogText.text;
+        string fileName = $"blindfold_game_log_{System.DateTime.Now:yyyy-MM-dd_HH-mm-ss}.txt";
+        string filePath = Path.Combine(Application.persistentDataPath, fileName);
+
+        try
+        {
+            // Add additional game information to the log
+            string fullLog = GenerateFullGameLog(logText);
+            File.WriteAllText(filePath, fullLog);
+
+            ShowMessage($"Log saved successfully!");
+            Debug.Log($"Move log saved to {filePath}");
+
+            // Also copy to clipboard if possible
+            GUIUtility.systemCopyBuffer = fullLog;
+            Debug.Log("Game log also copied to clipboard");
+        }
+        catch (System.Exception e)
+        {
+            ShowError("Failed to save log: " + e.Message);
+            Debug.LogError($"Failed to save log: {e}");
+        }
+    }
+
+    string GenerateFullGameLog(string moveLog)
+    {
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+
+        // Add game header information
+        sb.AppendLine("=== BLINDFOLD CHESS GAME LOG ===");
+        sb.AppendLine($"Date: {System.DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        sb.AppendLine($"White Player: {(localPlayer.color == ChessRules.PieceColor.White ? localPlayer.playerName : remotePlayer.playerName)}");
+        sb.AppendLine($"Black Player: {(localPlayer.color == ChessRules.PieceColor.Black ? localPlayer.playerName : remotePlayer.playerName)}");
+        sb.AppendLine($"Game Duration: {timerText.text}");
+        sb.AppendLine($"Total Moves: {moveHistory.Count}");
+        sb.AppendLine("");
+
+        // Add the actual move log
+        sb.AppendLine(moveLog);
+
+        // Add final position information
+        sb.AppendLine("");
+        sb.AppendLine("=== FINAL POSITION ===");
+        sb.AppendLine(GenerateFinalPositionLog());
+
+        return sb.ToString();
+    }
+
+    string GenerateFinalPositionLog()
+    {
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+
+        // Generate a simple text representation of the final board position
+        for (int row = 0; row < 8; row++)
+        {
+            sb.Append($"{8 - row} ");
+            for (int col = 0; col < 8; col++)
+            {
+                var piece = chessRules.GetPiece(row, col);
+                if (piece != null && piece.type != ChessRules.PieceType.None)
+                {
+                    string pieceSymbol = GetPieceSymbol(piece);
+                    sb.Append(pieceSymbol + " ");
+                }
+                else
+                {
+                    sb.Append(". ");
+                }
+            }
+            sb.AppendLine();
+        }
+        sb.AppendLine("  a b c d e f g h");
+
+        return sb.ToString();
+    }
+
+    string GetPieceSymbol(ChessRules.ChessPiece piece)
+    {
+        string symbol = "";
+        switch (piece.type)
+        {
+            case ChessRules.PieceType.Pawn: symbol = "P"; break;
+            case ChessRules.PieceType.Knight: symbol = "N"; break;
+            case ChessRules.PieceType.Bishop: symbol = "B"; break;
+            case ChessRules.PieceType.Rook: symbol = "R"; break;
+            case ChessRules.PieceType.Queen: symbol = "Q"; break;
+            case ChessRules.PieceType.King: symbol = "K"; break;
+        }
+
+        return piece.color == ChessRules.PieceColor.White ? symbol : symbol.ToLower();
     }
 
     #endregion
@@ -835,9 +1130,9 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         {
             case ChessRules.PieceType.Knight: return "N";
             case ChessRules.PieceType.Bishop: return "B";
-            case ChessRules.PieceType.Rook:   return "R";
-            case ChessRules.PieceType.Queen:  return "Q";
-            case ChessRules.PieceType.King:   return "K";
+            case ChessRules.PieceType.Rook: return "R";
+            case ChessRules.PieceType.Queen: return "Q";
+            case ChessRules.PieceType.King: return "K";
             default: return ""; // pawns
         }
     }
@@ -845,17 +1140,17 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     string GetDisambiguation(ChessRules.PieceType type, ChessRules.PieceColor mover, int fromRow, int fromCol, int toRow, int toCol)
     {
         // Find other same-type pieces that can also move to (toRow,toCol)
-        var candidates = new List<(int r,int c)>();
-        for (int r=0;r<8;r++)
+        var candidates = new List<(int r, int c)>();
+        for (int r = 0; r < 8; r++)
         {
-            for (int c=0;c<8;c++)
+            for (int c = 0; c < 8; c++)
             {
-                if (r==fromRow && c==fromCol) continue;
-                var p = chessRules.GetPiece(r,c);
+                if (r == fromRow && c == fromCol) continue;
+                var p = chessRules.GetPiece(r, c);
                 if (p == null || p.type != type || p.color != mover) continue;
-                if (chessRules.IsValidMove(r,c,toRow,toCol,mover))
+                if (chessRules.IsValidMove(r, c, toRow, toCol, mover))
                 {
-                    candidates.Add((r,c));
+                    candidates.Add((r, c));
                 }
             }
         }
