@@ -387,21 +387,28 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         // Build SAN
         string san = kingside ? "O-O" : "O-O-O";
 
-        // Execute
+        // Execute castle
         chessRules.ExecuteCastling(localPlayer.color, kingside);
 
         // Cancel any draw offers when we make a move
         CancelDrawOffers();
 
-        // Append check/mate suffix based on opponent after the move
+        // Check/checkmate AFTER the move (against opponent)
         var opponent = (localPlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
-        if (chessRules.IsCheckmate(opponent)) san += "#";
-        else if (chessRules.IsInCheck(opponent)) san += "+";
+        bool isCheck = false;
+        if (chessRules.IsCheckmate(opponent)) { san += "#"; isCheck = true; }
+        else if (chessRules.IsInCheck(opponent)) { san += "+"; isCheck = true; }
 
         // Log and send
         AddMoveToLog(san, true);
         lobbyManager.SendMove(kingside ? "O-O" : "O-O-O");
 
+        // SOUND priority for castling: check > castle
+        if (isCheck)
+            UIButtonHoverSound.Instance.PlayCheck();
+        else
+            UIButtonHoverSound.Instance.PlayCastle();
+
         // Switch turns
         chessRules.NextTurn();
         isMyTurn = false;
@@ -410,59 +417,128 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         UpdateTurnIndicator();
         CheckGameState();
     }
+
 
     void ExecuteLocalMove(int fromRow, int fromCol, int toRow, int toCol)
+{
+    // Generate SAN using current board BEFORE making the move
+    string sanCore = GenerateSANCore(fromRow, fromCol, toRow, toCol, localPlayer.color);
+
+    // Detect capture BEFORE move
+    var targetPiece = chessRules.GetPiece(toRow, toCol);
+    bool wasCapture = targetPiece != null && targetPiece.type != ChessRules.PieceType.None;
+
+    // Execute move on engine
+    chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
+
+    // Cancel any draw offers when we make a move
+    CancelDrawOffers();
+
+    // Check/checkmate AFTER the move (against opponent)
+    var opponent = (localPlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
+    string san = sanCore;
+    bool isCheck = false;
+    if (chessRules.IsCheckmate(opponent)) { san += "#"; isCheck = true; }
+    else if (chessRules.IsInCheck(opponent)) { san += "+"; isCheck = true; }
+
+    // Log and send
+    AddMoveToLog(san, true);
+    string coord = SquareToString(fromRow, fromCol) + SquareToString(toRow, toCol);
+    lobbyManager.SendMove(coord);
+
+    // SOUND with priority: check > castle > capture > move
+    // (Not a castle here—handled in ExecuteLocalCastling—so: check > capture > move)
+    if (isCheck)
+        UIButtonHoverSound.Instance.PlayCheck();
+    else if (wasCapture)
+        UIButtonHoverSound.Instance.PlayCapture();
+    else
+        UIButtonHoverSound.Instance.PlayRandomMove();
+
+    // Switch turns
+    chessRules.NextTurn();
+    isMyTurn = false;
+    moveInputField.interactable = false;
+    moveInputField.text = "";
+    UpdateTurnIndicator();
+    CheckGameState();
+}
+
+
+
+   public void OnRemoteMoveReceived(string move)
+{
+    // Cancel any draw offers when a move is made
+    CancelDrawOffers();
+
+    if (!gameActive || isMyTurn) return;
+
+    string upper = move.ToUpper().Replace("0-0-0", "O-O-O").Replace("0-0", "O-O");
+    if (upper == "O-O" || upper == "O-O-O")
     {
-        // Generate SAN using current board BEFORE making the move
-        string sanCore = GenerateSANCore(fromRow, fromCol, toRow, toCol, localPlayer.color);
+        bool kingside = upper == "O-O";
+        // SAN before execute
+        string san = kingside ? "O-O" : "O-O-O";
+        chessRules.ExecuteCastling(remotePlayer.color, kingside);
 
-        // Execute move on engine
-        chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
+        // Suffix against opponent (local)
+        var opponent = (remotePlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
+        bool isCheck = false;
+        if (chessRules.IsCheckmate(opponent)) { san += "#"; isCheck = true; }
+        else if (chessRules.IsInCheck(opponent)) { san += "+"; isCheck = true; }
 
-        // Cancel any draw offers when we make a move
-        CancelDrawOffers();
+        AddMoveToLog(san, false);
 
-        // Append check/mate suffix based on opponent after the move
-        var opponent = (localPlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
-        string san = sanCore;
-        if (chessRules.IsCheckmate(opponent)) san += "#";
-        else if (chessRules.IsInCheck(opponent)) san += "+";
+        // SOUND priority: check > castle > capture > move
+        // (Castling can't capture, so: check > castle > move)
+        if (isCheck)
+            UIButtonHoverSound.Instance.PlayCheck();
+        else
+            UIButtonHoverSound.Instance.PlayCastle();
 
-        // Log and send
-        AddMoveToLog(san, true);
-        string coord = SquareToString(fromRow, fromCol) + SquareToString(toRow, toCol);
-        lobbyManager.SendMove(coord);
-
-        // Switch turns
         chessRules.NextTurn();
-        isMyTurn = false;
-        moveInputField.interactable = false;
-        moveInputField.text = "";
+        isMyTurn = true;
+        moveInputField.interactable = true;
         UpdateTurnIndicator();
+        ShowMessage("Your turn!");
+        FocusInput();
         CheckGameState();
+        return;
     }
 
-    public void OnRemoteMoveReceived(string move)
+    // Coordinate move (like e2e4)
+    if (move.Length >= 4)
     {
-        // Cancel any draw offers when a move is made
-        CancelDrawOffers();
-
-        if (!gameActive || isMyTurn) return;
-
-        string upper = move.ToUpper().Replace("0-0-0", "O-O-O").Replace("0-0", "O-O");
-        if (upper == "O-O" || upper == "O-O-O")
+        string fromSq = move.Substring(0, 2).ToLower();
+        string toSq = move.Substring(2, 2).ToLower();
+        if (TryParseSquare(fromSq, out int fr, out int fc) && TryParseSquare(toSq, out int tr, out int tc))
         {
-            bool kingside = upper == "O-O";
-            // SAN before execute
-            string san = kingside ? "O-O" : "O-O-O";
-            chessRules.ExecuteCastling(remotePlayer.color, kingside);
+            // SAN core BEFORE move
+            string sanCore = GenerateSANCore(fr, fc, tr, tc, remotePlayer.color);
+
+            // Detect capture BEFORE move
+            var targetPiece = chessRules.GetPiece(tr, tc);
+            bool wasCapture = targetPiece != null && targetPiece.type != ChessRules.PieceType.None;
+
+            // Execute
+            chessRules.ExecuteMove(fr, fc, tr, tc);
 
             // Suffix against opponent (local)
             var opponent = (remotePlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
-            if (chessRules.IsCheckmate(opponent)) san += "#";
-            else if (chessRules.IsInCheck(opponent)) san += "+";
+            string san = sanCore;
+            bool isCheck = false;
+            if (chessRules.IsCheckmate(opponent)) { san += "#"; isCheck = true; }
+            else if (chessRules.IsInCheck(opponent)) { san += "+"; isCheck = true; }
 
             AddMoveToLog(san, false);
+
+            // SOUND priority: check > castle > capture > move
+            if (isCheck)
+                UIButtonHoverSound.Instance.PlayCheck();
+            else if (wasCapture)
+                UIButtonHoverSound.Instance.PlayCapture();
+            else
+                UIButtonHoverSound.Instance.PlayRandomMove();
 
             chessRules.NextTurn();
             isMyTurn = true;
@@ -471,43 +547,10 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
             ShowMessage("Your turn!");
             FocusInput();
             CheckGameState();
-            return;
         }
-
-        // Coordinate
-        if (move.Length >= 4)
-        {
-            string fromSq = move.Substring(0, 2).ToLower();
-            string toSq = move.Substring(2, 2).ToLower();
-            if (TryParseSquare(fromSq, out int fr, out int fc) && TryParseSquare(toSq, out int tr, out int tc))
-            {
-                // SAN core from current board BEFORE move
-                string sanCore = GenerateSANCore(fr, fc, tr, tc, remotePlayer.color);
-
-                chessRules.ExecuteMove(fr, fc, tr, tc);
-
-                // suffix against opponent (local)
-                var opponent = (remotePlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
-                string san = sanCore;
-                if (chessRules.IsCheckmate(opponent)) san += "#";
-                else if (chessRules.IsInCheck(opponent)) san += "+";
-
-                AddMoveToLog(san, false);
-
-                chessRules.NextTurn();
-                isMyTurn = true;
-                moveInputField.interactable = true;
-
-                UpdateTurnIndicator();
-                ShowMessage("Your turn!");
-                FocusInput();
-                CheckGameState();
-                return;
-            }
-        }
-
-        Debug.LogWarning("Received invalid move from opponent: " + move);
     }
+}
+
 
     #endregion
 
@@ -523,41 +566,48 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     }
 
     IEnumerator RevealBoardTemporarily()
+{
+    // === SOUND: board reveal started ===
+    UIButtonHoverSound.Instance.PlayReveal();
+
+    chessBoardObject.SetActive(true);
+
+    // Store original scale and position
+    Vector3 originalScale = chessBoardObject.transform.localScale;
+    Vector2 originalPosition = Vector2.zero;
+
+    RectTransform boardRect = chessBoardObject.transform as RectTransform;
+    if (boardRect != null)
     {
-        chessBoardObject.SetActive(true);
-
-        // Store original scale and position
-        Vector3 originalScale = chessBoardObject.transform.localScale;
-        Vector2 originalPosition = Vector2.zero;
-
-        RectTransform boardRect = chessBoardObject.transform as RectTransform;
-        if (boardRect != null)
-        {
-            originalPosition = boardRect.anchoredPosition;
-            // Apply scale and position offset
-            boardRect.localScale = new Vector3(boardScaleFactor, boardScaleFactor, 1f);
-            boardRect.anchoredPosition = originalPosition + boardPositionOffset;
-        }
-        else
-        {
-            chessBoardObject.transform.localScale = new Vector3(boardScaleFactor, boardScaleFactor, 1f);
-        }
-
-        SpawnAllPieces();
-
-        yield return new WaitForSeconds(revealDuration);
-
-        ClearPieces();
-
-        // Restore original scale and position
-        chessBoardObject.transform.localScale = originalScale;
-        if (boardRect != null)
-        {
-            boardRect.anchoredPosition = originalPosition;
-        }
-
-        chessBoardObject.SetActive(false);
+        originalPosition = boardRect.anchoredPosition;
+        // Apply scale and position offset
+        boardRect.localScale = new Vector3(boardScaleFactor, boardScaleFactor, 1f);
+        boardRect.anchoredPosition = originalPosition + boardPositionOffset;
     }
+    else
+    {
+        chessBoardObject.transform.localScale = new Vector3(boardScaleFactor, boardScaleFactor, 1f);
+    }
+
+    SpawnAllPieces();
+
+    yield return new WaitForSeconds(revealDuration);
+
+    ClearPieces();
+
+    // Restore original scale and position
+    chessBoardObject.transform.localScale = originalScale;
+    if (boardRect != null)
+    {
+        boardRect.anchoredPosition = originalPosition;
+    }
+
+    chessBoardObject.SetActive(false);
+
+    // === SOUND: reveal ended ===
+    UIButtonHoverSound.Instance.PlayRevealEnd();
+}
+
 
     void SpawnAllPieces()
     {

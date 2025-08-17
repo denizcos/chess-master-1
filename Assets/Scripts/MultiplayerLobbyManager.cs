@@ -87,6 +87,13 @@ public class MultiplayerLobbyManager : MonoBehaviour
     public Button joinCancelButton;
     public TMP_Text joinErrorText;
 
+    [Header("Join Name UI")]
+    public GameObject joinNamePanel;
+    public TMP_InputField joinNameInput;
+    public Button joinNameConfirmButton;
+    public Button joinNameCancelButton;
+    public TMP_Text joinNameErrorText;
+
     [Header("Direct Join UI")]
     public GameObject directJoinPanel;
     public TMP_InputField directJoinCodeInput;
@@ -208,6 +215,12 @@ public class MultiplayerLobbyManager : MonoBehaviour
         }
 
         passwordGroup.SetActive(false);
+        if (joinNameConfirmButton != null)
+            joinNameConfirmButton.onClick.AddListener(() => ConfirmJoinName());
+
+        if (joinNameCancelButton != null)
+            joinNameCancelButton.onClick.AddListener(() => CancelJoinName());
+
 
         // Start auto-refresh if lobby list is active (with longer interval)
         if (lobbyListPanel.activeSelf)
@@ -542,27 +555,61 @@ public class MultiplayerLobbyManager : MonoBehaviour
 
     Lobby pendingLobby;
 
-    void AttemptJoinLobby(Lobby lobby)
-    {
-        Debug.Log($"Attempting to join lobby: {lobby.Name}");
-        pendingLobby = lobby;
+void AttemptJoinLobby(Lobby lobby)
+{
+    Debug.Log($"Attempting to join lobby: {lobby.Name}");
+    pendingLobby = lobby;
 
-        // Check for password
-        bool hasPassword = lobby.Data != null &&
-                          lobby.Data.ContainsKey("Password") &&
-                          !string.IsNullOrEmpty(lobby.Data["Password"].Value);
+    // Always ask for a username first
+    if (joinNamePanel != null)
+    {
+        joinNamePanel.SetActive(true);
+        if (joinNameInput) joinNameInput.text = "";
+        if (joinNameErrorText) joinNameErrorText.text = "";
+    }
+}
+
+
+    void ConfirmJoinName()
+    {
+        if (pendingLobby == null) return;
+
+        string name = joinNameInput != null ? joinNameInput.text.Trim() : "";
+        if (string.IsNullOrEmpty(name))
+        {
+            if (joinNameErrorText) joinNameErrorText.text = "Please enter a username.";
+            return;
+        }
+
+        // Set the runtime player name used in JoinLobby options
+        currentPlayerName = name;
+
+        // Close name panel
+        if (joinNamePanel) joinNamePanel.SetActive(false);
+
+        // If the lobby has a password, open that next; otherwise join immediately
+        bool hasPassword = pendingLobby.Data != null &&
+                           pendingLobby.Data.ContainsKey("Password") &&
+                           !string.IsNullOrEmpty(pendingLobby.Data["Password"].Value);
 
         if (hasPassword)
         {
-            passwordPromptPanel.SetActive(true);
-            joinPasswordInput.text = "";
-            joinErrorText.text = "";
+            if (passwordPromptPanel) passwordPromptPanel.SetActive(true);
+            if (joinPasswordInput) joinPasswordInput.text = "";
+            if (joinErrorText) joinErrorText.text = "";
         }
         else
         {
-            JoinLobby(lobby);
+            JoinLobby(pendingLobby);
         }
     }
+
+void CancelJoinName()
+{
+    if (joinNamePanel) joinNamePanel.SetActive(false);
+    pendingLobby = null;
+}
+
 
     void ConfirmJoinWithPassword()
     {

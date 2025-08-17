@@ -13,10 +13,12 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
     [Header("Audio Source")]
     public AudioSource audioSource;
 
+
     [Header("UI Sounds")]
     public AudioClip hoverClip;
     public AudioClip clickClip;
     public AudioClip switchClip;
+
 
     [Header("Game Sounds")]
     public AudioClip revealClip;
@@ -25,7 +27,7 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
     public AudioClip checkClip;
     public AudioClip checkmateClip;
     public AudioClip stalemateClip;
-
+    public AudioClip castleClip;
 
     [Header("Answer Sounds")]
     public AudioClip correctClip;
@@ -115,6 +117,13 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
         if (audioSource != null && correctClip != null)
             audioSource.PlayOneShot(correctClip);
     }
+
+    public void PlayCastle()
+    {
+        if (audioSource != null && castleClip != null)
+            audioSource.PlayOneShot(castleClip);
+    }
+
 
     public void PlayWrong()
     {
