@@ -16,6 +16,9 @@ using Unity.Services.Relay.Models;
 using System.Threading.Tasks;
 
 [System.Serializable]
+
+
+
 public class LobbyData
 {
     public string lobbyId;
@@ -117,6 +120,8 @@ public class MultiplayerLobbyManager : MonoBehaviour
     private const float MIN_UI_UPDATE_INTERVAL = 1f;
     private const float MIN_HEARTBEAT_INTERVAL = 20f; // Increased from 15f
 
+    private Coroutine autoRefreshCoroutine;
+
     // Unity Services variables
     private Lobby currentUnityLobby;
     private List<Lobby> availableLobbies = new List<Lobby>();
@@ -192,7 +197,9 @@ public class MultiplayerLobbyManager : MonoBehaviour
         backToMenuButton.onClick.AddListener(() => ShowMainMenu());
 
         confirmCreateButton.onClick.AddListener(() => CreateLobby());
-        cancelCreateButton.onClick.AddListener(() => ShowLobbyListPanel());
+        cancelCreateButton.onClick.RemoveAllListeners();
+        cancelCreateButton.onClick.AddListener(() => createLobbyPanel.SetActive(false));
+
 
         readyButton.onClick.AddListener(() => ToggleReady());
         startGameButton.onClick.AddListener(() => StartGame());
@@ -238,28 +245,29 @@ public class MultiplayerLobbyManager : MonoBehaviour
     #region Panel Management
 
     public void ShowLobbyListPanel()
-    {
-        lobbyListPanel.SetActive(true);
-        if (createLobbyPanel) createLobbyPanel.SetActive(false);
-        if (lobbyRoomPanel) lobbyRoomPanel.SetActive(false);
+{
+    lobbyListPanel.SetActive(true);
+    if (createLobbyPanel) createLobbyPanel.SetActive(false);
+    if (lobbyRoomPanel) lobbyRoomPanel.SetActive(false);
 
-        // Start auto-refresh when showing lobby list
-        StartCoroutine(AutoRefreshLobbyList());
-    }
+    if (autoRefreshCoroutine == null)
+        autoRefreshCoroutine = StartCoroutine(AutoRefreshLobbyList());
+}
+
 
     IEnumerator AutoRefreshLobbyList()
+{
+    while (lobbyListPanel.activeSelf)
     {
-        while (lobbyListPanel.activeSelf)
-        {
-            RefreshLobbyList();
-            yield return new WaitForSecondsRealtime(refreshInterval); // Increased interval
-        }
+        RefreshLobbyList();
+        yield return new WaitForSecondsRealtime(refreshInterval);
     }
+    autoRefreshCoroutine = null;
+}
 
     void ShowCreateLobbyPanel()
     {
         createLobbyPanel.SetActive(true);
-        lobbyListPanel.SetActive(false);
 
         lobbyNameInput.text = currentPlayerName + "'s Game";
         hostNameInput.text = currentPlayerName;
