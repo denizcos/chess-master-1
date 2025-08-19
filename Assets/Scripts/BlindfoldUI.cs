@@ -764,13 +764,16 @@ public class BlindfoldUI : MonoBehaviour
 
         if (chessRules.IsWhiteTurn)
         {
+            // White’s move starts the line
             moveLogText.text += $"{chessRules.MoveNumber}. {moveNotation} ";
         }
         else
         {
-            moveLogText.text += $"{moveNotation}";
+            // Black’s move finishes the line and adds newline
+            moveLogText.text += $"{moveNotation}\n";
         }
     }
+
 
     public void ResetGame()
     {

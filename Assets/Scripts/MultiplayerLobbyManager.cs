@@ -44,6 +44,10 @@ public class PlayerData
 
 public class MultiplayerLobbyManager : MonoBehaviour
 {
+    [Header("Chat UI")]
+    public ScrollRect chatScrollRect;
+
+    
     [Header("Panel References")]
     public GameObject mainMenuPanel;
     public GameObject lobbyListPanel;
@@ -1262,14 +1266,24 @@ void CancelJoinName()
     }
 
     void UpdateChatDisplay()
-    {
-        if (chatText == null || string.IsNullOrEmpty(currentLobbyId)) return;
+{
+    if (chatText == null || string.IsNullOrEmpty(currentLobbyId)) return;
 
-        if (lobbyChatMessages.ContainsKey(currentLobbyId))
-        {
-            chatText.text = string.Join("\n", lobbyChatMessages[currentLobbyId]);
-        }
+    if (lobbyChatMessages.ContainsKey(currentLobbyId))
+        chatText.text = string.Join("\n", lobbyChatMessages[currentLobbyId]);
+
+    // Auto-scroll next frame (after layout updates)
+    if (chatScrollRect != null)
+        StartCoroutine(ScrollToBottomNextFrame());
+}
+
+    IEnumerator ScrollToBottomNextFrame()
+    {
+        yield return null;                    // wait for layout to rebuild
+        Canvas.ForceUpdateCanvases();         // ensure sizes are final
+        chatScrollRect.verticalNormalizedPosition = 0f; // bottom
     }
+
 
     #endregion
 
