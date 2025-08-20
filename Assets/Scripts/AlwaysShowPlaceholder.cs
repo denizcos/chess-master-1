@@ -31,4 +31,20 @@ public class AlwaysShowPlaceholder : MonoBehaviour
             placeholderText.gameObject.SetActive(true);
         }
     }
+
+    void LateUpdate()
+    {
+        // Re-focus the input field after any potential deactivation (like after Enter press)
+        if (inputField != null && !inputField.isFocused)
+        {
+            inputField.Select();
+            inputField.ActivateInputField();
+        }
+
+        // Ensure placeholder stays visible even after text changes
+        if (placeholderText != null && !placeholderText.gameObject.activeInHierarchy)
+        {
+            placeholderText.gameObject.SetActive(true);
+        }
+    }
 }
