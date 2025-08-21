@@ -273,12 +273,17 @@ public class MultiplayerLobbyManager : MonoBehaviour
     {
         createLobbyPanel.SetActive(true);
 
+        // make sure join name panel is hidden
+        if (joinNamePanel != null)
+            joinNamePanel.SetActive(false);
+
         lobbyNameInput.text = currentPlayerName + "'s Game";
         hostNameInput.text = currentPlayerName;
         privateToggle.isOn = false;
         passwordInput.text = "";
         passwordGroup.SetActive(false);
     }
+
 
     void ShowLobbyRoomPanel()
     {
@@ -579,7 +584,12 @@ void AttemptJoinLobby(Lobby lobby)
         if (joinNameInput) joinNameInput.text = "";
         if (joinNameErrorText) joinNameErrorText.text = "";
     }
-}
+
+    // make sure create lobby panel is hidden
+    if (createLobbyPanel != null)
+        createLobbyPanel.SetActive(false);
+
+    }
 
 
     void ConfirmJoinName()

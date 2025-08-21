@@ -124,14 +124,15 @@ public class InputBasedMainMenuController : MonoBehaviour
     {
         switch (input)
         {
-            case "a1": return coordinateMode;  // Mode 1
-            case "b2": return aiMode;          // Mode 2
-            case "c3": return colorMode;       // Mode 3
-            case "d4": return movingMode;      // Mode 4
-            case "e5": return versusMode;      // Mode 5
+            case "a1": return coordinateMode;  // Coordinate Training
+            case "b2": return colorMode;       // Square Color Training
+            case "c3": return movingMode;      // Moving Mode
+            case "d4": return aiMode;          // AI Mode
+            case "e5": return versusMode;      // Online Battle
             default: return null;
         }
     }
+
 
     /// <summary>
     /// Enables all linked objects + the panel for this mode, then disables the main menu panel.
