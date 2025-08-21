@@ -16,6 +16,7 @@ public class BlindfoldUI : MonoBehaviour
     public Button revealBoardButton;
     public TMP_Dropdown difficultyDropdown;
     public GameObject difficultyPromptObject;
+    public ScrollRect moveLogScrollRect;  
 
     [Header("Chess Piece Sprites")]
     public Sprite whitePawnSprite;
@@ -766,11 +767,13 @@ public class BlindfoldUI : MonoBehaviour
         {
             // White’s move starts the line
             moveLogText.text += $"{chessRules.MoveNumber}. {moveNotation} ";
+            ScrollMoveLogToBottom();
         }
         else
         {
             // Black’s move finishes the line and adds newline
             moveLogText.text += $"{moveNotation}\n";
+            ScrollMoveLogToBottom();
         }
     }
 
@@ -999,6 +1002,17 @@ public class BlindfoldUI : MonoBehaviour
         string captureMark = wasCapture ? "x" : "";
 
         return $"{symbol}{captureMark}{toFile}{toRank}";
+    }
+    void ScrollMoveLogToBottom()
+    {
+        if (moveLogScrollRect == null) return;
+        StartCoroutine(ScrollMoveLogNextFrame());
+    }
+    IEnumerator ScrollMoveLogNextFrame()
+    {
+        yield return null;                 // wait for layout to resize
+        Canvas.ForceUpdateCanvases();
+        moveLogScrollRect.verticalNormalizedPosition = 0f; // bottom
     }
 
     #endregion

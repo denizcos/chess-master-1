@@ -134,7 +134,8 @@ TextureImporter:
     secondaryTextures: []
     spriteCustomMetadata:
       entries: []
-    nameFileIdTable: {}
+    nameFileIdTable:
+      onlne_fully_black 1_0: 6304228446533086782
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

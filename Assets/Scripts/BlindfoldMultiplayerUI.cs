@@ -20,6 +20,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     public Button resignButton;
     public Button drawOfferButton;
     public Button saveLogButton;
+    public ScrollRect moveLogScrollRect;
 
     [Header("Player Info")]
     public TMP_Text localPlayerNameText;
@@ -52,8 +53,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     public Color activePlayerColor = Color.green;
     public Color inactivePlayerColor = Color.gray;
     public Vector2 pieceSize = new Vector2(80f, 80f); // Increased from 60f to 80f
-    public float boardScaleFactor = 1.2f; // Reduced scale to stay within boundaries
-    public Vector2 boardPositionOffset = new Vector2(0f, -200f); // Move board much further down
+    public float boardScaleFactor = 1f; // Reduced scale to stay within boundaries
 
     // Game components
     private ChessRules chessRules;
@@ -129,6 +129,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         // Clear move log
         moveLogText.text = "=== Blindfold Chess Match ===\n";
         moveLogText.text += $"{localPlayer.playerName} vs {remotePlayer.playerName}\n\n";
+        ScrollMoveLogToBottom(); 
 
         // Initialize draw button
         UpdateDrawButtonText();
@@ -581,8 +582,8 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     {
         originalPosition = boardRect.anchoredPosition;
         // Apply scale and position offset
-        boardRect.localScale = new Vector3(boardScaleFactor, boardScaleFactor, 1f);
-        boardRect.anchoredPosition = originalPosition + boardPositionOffset;
+        boardRect.localScale = Vector3.one;  
+        boardRect.anchoredPosition = originalPosition;
     }
     else
     {
@@ -878,7 +879,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         {
             originalPosition = boardRect.anchoredPosition;
             boardRect.localScale = new Vector3(boardScaleFactor, boardScaleFactor, 1f);
-            boardRect.anchoredPosition = originalPosition + boardPositionOffset;
+            boardRect.anchoredPosition = originalPosition;
         }
         else
         {
@@ -1050,6 +1051,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         }
 
         moveHistory.Add(san);
+        ScrollMoveLogToBottom();
     }
 
     void ShowMessage(string message)
@@ -1072,6 +1074,19 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
             errorMessageText.gameObject.SetActive(true);
             StartCoroutine(HideMessageAfterDelay());
         }
+    }
+
+    void ScrollMoveLogToBottom()
+    {
+        if (moveLogScrollRect == null) return;
+        StartCoroutine(ScrollMoveLogNextFrame());
+    }
+
+    IEnumerator ScrollMoveLogNextFrame()
+    {
+        yield return null;                 // wait for layout to resize
+        Canvas.ForceUpdateCanvases();
+        moveLogScrollRect.verticalNormalizedPosition = 0f; // bottom
     }
 
     IEnumerator HideMessageAfterDelay()
