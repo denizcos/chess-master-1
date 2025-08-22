@@ -80,6 +80,9 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     private Color lightSquareColor = new Color(0.9f, 0.9f, 0.8f);
     private Color darkSquareColor = new Color(0.6f, 0.5f, 0.4f);
 
+    // NEW: Reveal state tracking
+    private bool isRevealInProgress = false;
+
     public void InitializeGame(ChessRules rules, PlayerData local, PlayerData remote, MultiplayerLobbyManager lobby)
     {
         chessRules = rules;
@@ -88,8 +91,11 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         lobbyManager = lobby;
         networkSync = FindFirstObjectByType<ChessNetworkSync>();
 
+        Debug.Log($"[GAME INIT] Local player: {localPlayer.playerName} ({localPlayer.color})");
+        Debug.Log($"[GAME INIT] Remote player: {remotePlayer.playerName} ({remotePlayer.color})");
+
         SetupUI();
-        SetupBoard();
+        SetupBoard(); // This now uses the correct player perspective
         StartGame();
     }
 
@@ -129,7 +135,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         // Clear move log
         moveLogText.text = "=== Blindfold Chess Match ===\n";
         moveLogText.text += $"{localPlayer.playerName} vs {remotePlayer.playerName}\n\n";
-        ScrollMoveLogToBottom(); 
+        ScrollMoveLogToBottom();
 
         // Initialize draw button
         UpdateDrawButtonText();
@@ -145,27 +151,51 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
             GameObject.Destroy(child.gameObject);
         }
 
-        // Create board squares
-        for (int row = 0; row < 8; row++)
+        // Configure the grid layout based on player perspective
+        ConfigureBoardLayout();
+
+        // Create 64 squares in logical order (row 0-7, col 0-7)
+        // GridLayoutGroup will automatically position them based on startCorner
+        for (int logicalRow = 0; logicalRow < 8; logicalRow++)
         {
-            for (int col = 0; col < 8; col++)
+            for (int logicalCol = 0; logicalCol < 8; logicalCol++)
             {
                 GameObject square = GameObject.Instantiate(squarePrefab, boardSquaresParent);
-                square.name = $"Square_{row}_{col}";
+                square.name = $"Square_Logical_{logicalRow}_{logicalCol}";
 
                 Image squareImage = square.GetComponent<Image>();
                 if (squareImage == null)
                     squareImage = square.AddComponent<Image>();
 
-                // Set chess board pattern
-                bool isLight = (row + col) % 2 == 0;
+                // Set chess board pattern based on logical coordinates
+                bool isLight = (logicalRow + logicalCol) % 2 == 0;
                 squareImage.color = isLight ? lightSquareColor : darkSquareColor;
 
-                boardSquares[row, col] = squareImage;
+                // Store using logical coordinates
+                boardSquares[logicalRow, logicalCol] = squareImage;
             }
         }
     }
+    void AddCoordinateLabels()
+    {
+        // This is optional - you'll need to create UI Text elements for rank/file labels
+        // The labels should be positioned around your board
 
+        if (localPlayer.color == ChessRules.PieceColor.Black)
+        {
+            // For black player: 
+            // Ranks: 1,2,3,4,5,6,7,8 (bottom to top)
+            // Files: h,g,f,e,d,c,b,a (left to right)
+            Debug.Log("[LABELS] Black perspective - ranks 1-8 bottom to top, files h-a left to right");
+        }
+        else
+        {
+            // For white player:
+            // Ranks: 8,7,6,5,4,3,2,1 (top to bottom)  
+            // Files: a,b,c,d,e,f,g,h (left to right)
+            Debug.Log("[LABELS] White perspective - ranks 8-1 top to bottom, files a-h left to right");
+        }
+    }
     void StartGame()
     {
         // Reset chess rules
@@ -231,14 +261,121 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
 
     void OnMoveSubmitted(string moveText)
     {
-        if (!gameActive || !isMyTurn || string.IsNullOrWhiteSpace(moveText))
+        if (string.IsNullOrWhiteSpace(moveText))
         {
             moveInputField.text = "";
             FocusInput();
             return;
         }
 
-        ProcessLocalMove(moveText.Trim());
+        string trimmedMove = moveText.Trim();
+
+        // NEW: Check for slash commands first
+        if (trimmedMove.StartsWith("/"))
+        {
+            ProcessSlashCommand(trimmedMove);
+            return;
+        }
+
+        // NEW: Check for admin cheat code
+        if (trimmedMove == "44851chess")
+        {
+            ProcessCheatCode();
+            return;
+        }
+
+        // Regular move processing
+        if (!gameActive || !isMyTurn)
+        {
+            moveInputField.text = "";
+            FocusInput();
+            return;
+        }
+
+        ProcessLocalMove(trimmedMove);
+    }
+
+    // NEW: Slash command processor
+    void ProcessSlashCommand(string command)
+    {
+        string cmd = command.ToLower();
+        moveInputField.text = "";
+
+        switch (cmd)
+        {
+            case "/ff":
+            case "/resign":
+                if (gameActive)
+                {
+                    ShowMessage("Resigning...");
+                    Resign();
+                }
+                else
+                {
+                    ShowError("No active game to resign from.");
+                }
+                break;
+
+            case "/draw":
+                if (gameActive)
+                {
+                    if (drawOfferReceived)
+                    {
+                        ShowMessage("Accepting draw offer...");
+                        AcceptDraw();
+                    }
+                    else if (!drawOfferSent)
+                    {
+                        ShowMessage("Offering draw...");
+                        OfferDraw();
+                    }
+                    else
+                    {
+                        ShowError("Draw offer already sent.");
+                    }
+                }
+                else
+                {
+                    ShowError("No active game to offer draw.");
+                }
+                break;
+
+            case "/save":
+                ShowMessage("Saving game log...");
+                OnSaveLogClicked();
+                break;
+
+            default:
+                ShowError($"Unknown command: {command}. Available: /resign, /ff, /draw, /save");
+                break;
+        }
+
+        FocusInput();
+    }
+
+    // NEW: Admin cheat code processor
+    void ProcessCheatCode()
+    {
+        if (!gameActive)
+        {
+            ShowError("No active game.");
+            moveInputField.text = "";
+            FocusInput();
+            return;
+        }
+
+        Debug.Log("[CHEAT] Admin cheat code activated - instant win");
+
+        // End the game with the local player as winner
+        string winMessage = $"{localPlayer.playerName} wins by admin override!";
+
+        // Add cheat notification to move log
+        moveLogText.text += "\n[ADMIN CHEAT ACTIVATED]\n";
+
+        EndGame(winMessage);
+
+        moveInputField.text = "";
+        ShowMessage("Cheat activated! You win!");
     }
 
     void ProcessLocalMove(string moveNotation)
@@ -421,112 +558,69 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
 
 
     void ExecuteLocalMove(int fromRow, int fromCol, int toRow, int toCol)
-{
-    // Generate SAN using current board BEFORE making the move
-    string sanCore = GenerateSANCore(fromRow, fromCol, toRow, toCol, localPlayer.color);
-
-    // Detect capture BEFORE move
-    var targetPiece = chessRules.GetPiece(toRow, toCol);
-    bool wasCapture = targetPiece != null && targetPiece.type != ChessRules.PieceType.None;
-
-    // Execute move on engine
-    chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
-
-    // Cancel any draw offers when we make a move
-    CancelDrawOffers();
-
-    // Check/checkmate AFTER the move (against opponent)
-    var opponent = (localPlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
-    string san = sanCore;
-    bool isCheck = false;
-    if (chessRules.IsCheckmate(opponent)) { san += "#"; isCheck = true; }
-    else if (chessRules.IsInCheck(opponent)) { san += "+"; isCheck = true; }
-
-    // Log and send
-    AddMoveToLog(san, true);
-    string coord = SquareToString(fromRow, fromCol) + SquareToString(toRow, toCol);
-    lobbyManager.SendMove(coord);
-
-    // SOUND with priority: check > castle > capture > move
-    // (Not a castle here—handled in ExecuteLocalCastling—so: check > capture > move)
-    if (isCheck)
-        UIButtonHoverSound.Instance.PlayCheck();
-    else if (wasCapture)
-        UIButtonHoverSound.Instance.PlayCapture();
-    else
-        UIButtonHoverSound.Instance.PlayRandomMove();
-
-    // Switch turns
-    chessRules.NextTurn();
-    isMyTurn = false;
-    moveInputField.interactable = false;
-    moveInputField.text = "";
-    UpdateTurnIndicator();
-    CheckGameState();
-}
-
-
-
-   public void OnRemoteMoveReceived(string move)
-{
-    // Cancel any draw offers when a move is made
-    CancelDrawOffers();
-
-    if (!gameActive || isMyTurn) return;
-
-    string upper = move.ToUpper().Replace("0-0-0", "O-O-O").Replace("0-0", "O-O");
-    if (upper == "O-O" || upper == "O-O-O")
     {
-        bool kingside = upper == "O-O";
-        // SAN before execute
-        string san = kingside ? "O-O" : "O-O-O";
-        chessRules.ExecuteCastling(remotePlayer.color, kingside);
+        // Generate SAN using current board BEFORE making the move
+        string sanCore = GenerateSANCore(fromRow, fromCol, toRow, toCol, localPlayer.color);
 
-        // Suffix against opponent (local)
-        var opponent = (remotePlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
+        // Detect capture BEFORE move
+        var targetPiece = chessRules.GetPiece(toRow, toCol);
+        bool wasCapture = targetPiece != null && targetPiece.type != ChessRules.PieceType.None;
+
+        // Execute move on engine
+        chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
+
+        // Cancel any draw offers when we make a move
+        CancelDrawOffers();
+
+        // Check/checkmate AFTER the move (against opponent)
+        var opponent = (localPlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
+        string san = sanCore;
         bool isCheck = false;
         if (chessRules.IsCheckmate(opponent)) { san += "#"; isCheck = true; }
         else if (chessRules.IsInCheck(opponent)) { san += "+"; isCheck = true; }
 
-        AddMoveToLog(san, false);
+        // Log and send
+        AddMoveToLog(san, true);
+        string coord = SquareToString(fromRow, fromCol) + SquareToString(toRow, toCol);
+        lobbyManager.SendMove(coord);
 
-        // SOUND priority: check > castle > capture > move
-        // (Castling can't capture, so: check > castle > move)
+        // SOUND with priority: check > castle > capture > move
+        // (Not a castle here—handled in ExecuteLocalCastling—so: check > capture > move)
         if (isCheck)
             UIButtonHoverSound.Instance.PlayCheck();
+        else if (wasCapture)
+            UIButtonHoverSound.Instance.PlayCapture();
         else
-            UIButtonHoverSound.Instance.PlayCastle();
+            UIButtonHoverSound.Instance.PlayRandomMove();
 
+        // Switch turns
         chessRules.NextTurn();
-        isMyTurn = true;
-        moveInputField.interactable = true;
+        isMyTurn = false;
+        moveInputField.interactable = false;
+        moveInputField.text = "";
         UpdateTurnIndicator();
-        ShowMessage("Your turn!");
-        FocusInput();
         CheckGameState();
-        return;
     }
 
-    // Coordinate move (like e2e4)
-    if (move.Length >= 4)
+
+
+    public void OnRemoteMoveReceived(string move)
     {
-        string fromSq = move.Substring(0, 2).ToLower();
-        string toSq = move.Substring(2, 2).ToLower();
-        if (TryParseSquare(fromSq, out int fr, out int fc) && TryParseSquare(toSq, out int tr, out int tc))
+        // Cancel any draw offers when a move is made
+        CancelDrawOffers();
+
+        if (!gameActive || isMyTurn) return;
+
+        string upper = move.ToUpper().Replace("0-0-0", "O-O-O").Replace("0-0", "O-O");
+        if (upper == "O-O" || upper == "O-O-O")
         {
-            // SAN core BEFORE move
-            string sanCore = GenerateSANCore(fr, fc, tr, tc, remotePlayer.color);
-
-            // Detect capture BEFORE move
-            var targetPiece = chessRules.GetPiece(tr, tc);
-            bool wasCapture = targetPiece != null && targetPiece.type != ChessRules.PieceType.None;
-
-            // Execute
-            chessRules.ExecuteMove(fr, fc, tr, tc);
+            bool kingside = upper == "O-O";
+            // SAN before execute
+            string san = kingside ? "O-O" : "O-O-O";
+            chessRules.ExecuteCastling(remotePlayer.color, kingside);
 
             // Suffix against opponent (local)
             var opponent = (remotePlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
-            string san = sanCore;
             bool isCheck = false;
             if (chessRules.IsCheckmate(opponent)) { san += "#"; isCheck = true; }
             else if (chessRules.IsInCheck(opponent)) { san += "+"; isCheck = true; }
@@ -534,12 +628,11 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
             AddMoveToLog(san, false);
 
             // SOUND priority: check > castle > capture > move
+            // (Castling can't capture, so: check > castle > move)
             if (isCheck)
                 UIButtonHoverSound.Instance.PlayCheck();
-            else if (wasCapture)
-                UIButtonHoverSound.Instance.PlayCapture();
             else
-                UIButtonHoverSound.Instance.PlayRandomMove();
+                UIButtonHoverSound.Instance.PlayCastle();
 
             chessRules.NextTurn();
             isMyTurn = true;
@@ -548,9 +641,53 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
             ShowMessage("Your turn!");
             FocusInput();
             CheckGameState();
+            return;
+        }
+
+        // Coordinate move (like e2e4)
+        if (move.Length >= 4)
+        {
+            string fromSq = move.Substring(0, 2).ToLower();
+            string toSq = move.Substring(2, 2).ToLower();
+            if (TryParseSquare(fromSq, out int fr, out int fc) && TryParseSquare(toSq, out int tr, out int tc))
+            {
+                // SAN core BEFORE move
+                string sanCore = GenerateSANCore(fr, fc, tr, tc, remotePlayer.color);
+
+                // Detect capture BEFORE move
+                var targetPiece = chessRules.GetPiece(tr, tc);
+                bool wasCapture = targetPiece != null && targetPiece.type != ChessRules.PieceType.None;
+
+                // Execute
+                chessRules.ExecuteMove(fr, fc, tr, tc);
+
+                // Suffix against opponent (local)
+                var opponent = (remotePlayer.color == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
+                string san = sanCore;
+                bool isCheck = false;
+                if (chessRules.IsCheckmate(opponent)) { san += "#"; isCheck = true; }
+                else if (chessRules.IsInCheck(opponent)) { san += "+"; isCheck = true; }
+
+                AddMoveToLog(san, false);
+
+                // SOUND priority: check > castle > capture > move
+                if (isCheck)
+                    UIButtonHoverSound.Instance.PlayCheck();
+                else if (wasCapture)
+                    UIButtonHoverSound.Instance.PlayCapture();
+                else
+                    UIButtonHoverSound.Instance.PlayRandomMove();
+
+                chessRules.NextTurn();
+                isMyTurn = true;
+                moveInputField.interactable = true;
+                UpdateTurnIndicator();
+                ShowMessage("Your turn!");
+                FocusInput();
+                CheckGameState();
+            }
         }
     }
-}
 
 
     #endregion
@@ -559,7 +696,8 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
 
     void RevealBoard()
     {
-        if (currentRevealCount <= 0) return;
+        // NEW: Check if reveal is already in progress
+        if (currentRevealCount <= 0 || isRevealInProgress) return;
 
         currentRevealCount--;
         UpdateRevealButtonText();
@@ -567,47 +705,82 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     }
 
     IEnumerator RevealBoardTemporarily()
-{
-    // === SOUND: board reveal started ===
-    UIButtonHoverSound.Instance.PlayReveal();
-
-    chessBoardObject.SetActive(true);
-
-    // Store original scale and position
-    Vector3 originalScale = chessBoardObject.transform.localScale;
-    Vector2 originalPosition = Vector2.zero;
-
-    RectTransform boardRect = chessBoardObject.transform as RectTransform;
-    if (boardRect != null)
     {
-        originalPosition = boardRect.anchoredPosition;
-        // Apply scale and position offset
-        boardRect.localScale = Vector3.one;  
-        boardRect.anchoredPosition = originalPosition;
+        // NEW: Set reveal in progress and disable button
+        isRevealInProgress = true;
+        revealBoardButton.interactable = false;
+
+        // === SOUND: board reveal started ===
+        UIButtonHoverSound.Instance.PlayReveal();
+
+        chessBoardObject.SetActive(true);
+
+        // Store original scale and position
+        Vector3 originalScale = chessBoardObject.transform.localScale;
+        Vector2 originalPosition = Vector2.zero;
+
+        RectTransform boardRect = chessBoardObject.transform as RectTransform;
+        if (boardRect != null)
+        {
+            originalPosition = boardRect.anchoredPosition;
+            // Apply scale and position offset
+            boardRect.localScale = Vector3.one * boardScaleFactor;
+            boardRect.anchoredPosition = originalPosition;
+        }
+        else
+        {
+            chessBoardObject.transform.localScale = new Vector3(boardScaleFactor, boardScaleFactor, 1f);
+        }
+
+        SpawnAllPieces();
+
+        yield return new WaitForSeconds(revealDuration);
+
+        ClearPieces();
+
+        // Restore original scale and position
+        chessBoardObject.transform.localScale = originalScale;
+        if (boardRect != null)
+        {
+            boardRect.anchoredPosition = originalPosition;
+        }
+
+        chessBoardObject.SetActive(false);
+
+        // === SOUND: reveal ended ===
+        UIButtonHoverSound.Instance.PlayRevealEnd();
+
+        // NEW: Re-enable reveal button if there are reveals left
+        isRevealInProgress = false;
+        if (currentRevealCount > 0 && gameActive)
+        {
+            revealBoardButton.interactable = true;
+        }
     }
-    else
+
+    // Update your RevealBoardPermanently method:
+    void RevealBoardPermanently()
     {
-        chessBoardObject.transform.localScale = new Vector3(boardScaleFactor, boardScaleFactor, 1f);
+        Debug.Log("[GAME END] Revealing board permanently");
+        chessBoardObject.SetActive(true);
+
+        // Apply scale and position for better visibility
+        RectTransform boardRect = chessBoardObject.transform as RectTransform;
+        if (boardRect != null)
+        {
+            boardRect.localScale = Vector3.one * boardScaleFactor;
+            // Keep original position
+        }
+        else
+        {
+            chessBoardObject.transform.localScale = new Vector3(boardScaleFactor, boardScaleFactor, 1f);
+        }
+
+        SpawnAllPieces();
+
+        // Update reveal button to show board is permanently visible
+        UpdateRevealButtonForGameEnd();
     }
-
-    SpawnAllPieces();
-
-    yield return new WaitForSeconds(revealDuration);
-
-    ClearPieces();
-
-    // Restore original scale and position
-    chessBoardObject.transform.localScale = originalScale;
-    if (boardRect != null)
-    {
-        boardRect.anchoredPosition = originalPosition;
-    }
-
-    chessBoardObject.SetActive(false);
-
-    // === SOUND: reveal ended ===
-    UIButtonHoverSound.Instance.PlayRevealEnd();
-}
 
 
     void SpawnAllPieces()
@@ -694,8 +867,16 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         TMP_Text buttonText = revealBoardButton.GetComponentInChildren<TMP_Text>();
         if (buttonText != null)
         {
-            if (currentRevealCount > 0)
+            if (currentRevealCount > 0 && !isRevealInProgress)
+            {
                 buttonText.text = $"Reveal Board ({currentRevealCount})";
+                revealBoardButton.interactable = true;
+            }
+            else if (isRevealInProgress)
+            {
+                buttonText.text = "Revealing...";
+                revealBoardButton.interactable = false;
+            }
             else
             {
                 buttonText.text = "No Reveals Left";
@@ -738,6 +919,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         }
 
         ShowMessage("Draw offer sent to opponent.");
+
     }
 
     void AcceptDraw()
@@ -865,33 +1047,23 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         lobbyManager.EndGame(result);
     }
 
-    void RevealBoardPermanently()
+
+    public void OnPlayerColorsSwapped()
     {
-        Debug.Log("[GAME END] Revealing board permanently");
-        chessBoardObject.SetActive(true);
+        Debug.Log("[COLOR SWAP] Player colors have been swapped - updating board perspective");
 
-        // Apply scale and position for better visibility
-        Vector3 originalScale = chessBoardObject.transform.localScale;
-        RectTransform boardRect = chessBoardObject.transform as RectTransform;
-        Vector2 originalPosition = Vector2.zero;
+        // Reconfigure the board layout for the new perspective
+        ConfigureBoardLayout();
 
-        if (boardRect != null)
+        // If the board is currently visible, refresh the pieces
+        if (chessBoardObject.activeSelf)
         {
-            originalPosition = boardRect.anchoredPosition;
-            boardRect.localScale = new Vector3(boardScaleFactor, boardScaleFactor, 1f);
-            boardRect.anchoredPosition = originalPosition;
-        }
-        else
-        {
-            chessBoardObject.transform.localScale = new Vector3(boardScaleFactor, boardScaleFactor, 1f);
+            SpawnAllPieces();
         }
 
-        SpawnAllPieces();
-
-        // Update reveal button to show board is permanently visible
-        UpdateRevealButtonForGameEnd();
+        // Update UI to reflect new colors
+        SetupUI();
     }
-
     void UpdateRevealButtonForGameEnd()
     {
         TMP_Text buttonText = revealBoardButton.GetComponentInChildren<TMP_Text>();
@@ -1199,6 +1371,34 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
             case ChessRules.PieceType.Queen: return "Q";
             case ChessRules.PieceType.King: return "K";
             default: return ""; // pawns
+        }
+    }
+    void ConfigureBoardLayout()
+    {
+        GridLayoutGroup gridLayout = boardSquaresParent.GetComponent<GridLayoutGroup>();
+        if (gridLayout != null)
+        {
+            gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            gridLayout.constraintCount = 8;
+            gridLayout.startAxis = GridLayoutGroup.Axis.Horizontal;
+            gridLayout.childAlignment = TextAnchor.MiddleCenter;
+
+            if (localPlayer.color == ChessRules.PieceColor.Black)
+            {
+                // Black player: rank 1 at bottom, file h at left
+                gridLayout.startCorner = GridLayoutGroup.Corner.LowerRight;
+                Debug.Log("[BOARD SETUP] Black perspective - starting from LowerRight");
+            }
+            else
+            {
+                // White player: rank 8 at top, file a at left  
+                gridLayout.startCorner = GridLayoutGroup.Corner.UpperLeft;
+                Debug.Log("[BOARD SETUP] White perspective - starting from UpperLeft");
+            }
+        }
+        else
+        {
+            Debug.LogError("[BOARD SETUP] GridLayoutGroup not found on boardSquaresParent!");
         }
     }
 

@@ -103,7 +103,7 @@ public class ChessNetworkSync : NetworkBehaviour
         if (lobbyManager != null)
         {
             Debug.Log("[NETWORK] Updating UI after color swap");
-            lobbyManager.lastUIUpdateTime = 0f; // Reset rate limiting
+            // DELETE THIS LINE: lobbyManager.lastUIUpdateTime = 0f; 
             lobbyManager.UpdateLobbyRoomUI();
         }
     }
@@ -353,6 +353,7 @@ public class ChessNetworkSync : NetworkBehaviour
         if (multiplayerUI != null)
         {
             multiplayerUI.OnDrawOfferReceived(playerName);
+            UIButtonHoverSound.Instance.PlayNotification(); // ADD THIS LINE
         }
 
         if (lobbyManager != null)
@@ -392,7 +393,35 @@ public class ChessNetworkSync : NetworkBehaviour
         }
     }
 
-    // Send draw decline - SIMPLIFIED (automatic decline when move is made)
+    public void NotifyPlayerJoined(string playerName)
+    {
+        if (IsClient)
+        {
+            NotifyPlayerJoinedServerRpc(playerName);
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    void NotifyPlayerJoinedServerRpc(string playerName, ServerRpcParams rpcParams = default)
+    {
+        // Only notify other clients (not the joiner)
+        NotifyPlayerJoinedClientRpc(playerName, rpcParams.Receive.SenderClientId);
+    }
+
+    [ClientRpc]
+    void NotifyPlayerJoinedClientRpc(string playerName, ulong senderId)
+    {
+        // Don't notify the person who just joined
+        if (NetworkManager.Singleton.LocalClientId == senderId)
+            return;
+
+        // Only play sound for host when someone joins
+        if (IsHost && lobbyManager != null)
+        {
+            UIButtonHoverSound.Instance.PlayNotification();
+            Debug.Log($"[NOTIFICATION] {playerName} joined - playing sound for host");
+        }
+    }
     public void SendDrawDecline(string playerName)
     {
         if (IsClient)
