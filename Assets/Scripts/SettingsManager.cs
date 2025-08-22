@@ -9,10 +9,17 @@ public class SettingsManager : MonoBehaviour
     public GameObject settingsPanel;
     public ScrollRect settingsScrollRect;
 
-    [Header("Audio Settings")]
+    [Header("Audio Settings (UI)")]
+    // generalSoundToggle controls SFX ONLY (not music)
     public Toggle generalSoundToggle;
     public Toggle musicToggle;
+
+    // Controls MUSIC ONLY
     public Slider masterVolumeSlider;
+
+    [Header("Audio Refs")]
+    // Assign your background-music AudioSource here in the Inspector
+    public AudioSource musicSource;
 
     [Header("Other Settings")]
     public Button quitGameButton;
@@ -37,34 +44,31 @@ public class SettingsManager : MonoBehaviour
 
     void InitializeSettings()
     {
-        // Hide settings panel initially
         if (settingsPanel != null)
             settingsPanel.SetActive(false);
 
-        // Setup button listeners
         if (closeSettingsButton != null)
             closeSettingsButton.onClick.AddListener(CloseSettings);
 
         if (quitGameButton != null)
             quitGameButton.onClick.AddListener(QuitGame);
 
-        // Setup audio controls
         if (generalSoundToggle != null)
         {
             generalSoundToggle.onValueChanged.AddListener(OnGeneralSoundToggled);
-            generalSoundToggle.isOn = true; // Default enabled
+            generalSoundToggle.isOn = true; // default
         }
 
         if (musicToggle != null)
         {
             musicToggle.onValueChanged.AddListener(OnMusicToggled);
-            musicToggle.isOn = true; // Default enabled
+            musicToggle.isOn = true; // default
         }
 
         if (masterVolumeSlider != null)
         {
-            masterVolumeSlider.onValueChanged.AddListener(OnVolumeChanged);
-            masterVolumeSlider.value = 1f; // Default full volume
+            masterVolumeSlider.onValueChanged.AddListener(OnMusicVolumeChanged);
+            masterVolumeSlider.value = 0.45f; // default
         }
 
         LoadSettings();
@@ -72,15 +76,12 @@ public class SettingsManager : MonoBehaviour
 
     void Update()
     {
-        // Handle Escape key
         if (Input.GetKeyDown(KeyCode.Escape))
         {
             if (isSettingsOpen)
             {
-                // Play button sound when closing with Escape
                 if (UIButtonHoverSound.Instance != null)
                     UIButtonHoverSound.Instance.PlayClick();
-
                 CloseSettings();
             }
             else
@@ -96,20 +97,16 @@ public class SettingsManager : MonoBehaviour
         {
             settingsPanel.SetActive(true);
             isSettingsOpen = true;
-
-            // Make sure settings panel is on top
             settingsPanel.transform.SetAsLastSibling();
 
-            // Ensure Canvas Group allows interaction
-            CanvasGroup canvasGroup = settingsPanel.GetComponent<CanvasGroup>();
-            if (canvasGroup == null)
-                canvasGroup = settingsPanel.AddComponent<CanvasGroup>();
-
-            canvasGroup.interactable = true;
-            canvasGroup.blocksRaycasts = true;
-            canvasGroup.alpha = 1f;
+            CanvasGroup cg = settingsPanel.GetComponent<CanvasGroup>();
+            if (cg == null) cg = settingsPanel.AddComponent<CanvasGroup>();
+            cg.interactable = true;
+            cg.blocksRaycasts = true;
+            cg.alpha = 1f;
         }
     }
+
     public void CloseSettings()
     {
         if (settingsPanel != null)
@@ -117,35 +114,76 @@ public class SettingsManager : MonoBehaviour
             settingsPanel.SetActive(false);
             isSettingsOpen = false;
         }
+
+        // Re-apply current music state so music does NOT come back after closing
+        ApplyMusicMute();
+        ApplyMusicVolume();
     }
 
+    // ==== Audio handlers ====
 
+    // SFX ONLY
     void OnGeneralSoundToggled(bool enabled)
     {
-        // Control all UI sounds
-        if (UIButtonHoverSound.Instance != null)
+        // Example: UI sounds
+        if (UIButtonHoverSound.Instance != null && UIButtonHoverSound.Instance.audioSource != null)
         {
             UIButtonHoverSound.Instance.audioSource.mute = !enabled;
         }
 
-        // You can extend this to control other sound effects
+        // If you have a central SFX manager/mixer, hook it here.
+        // e.g., SFXManager.Instance?.SetEnabled(enabled);
+
         SaveSettings();
     }
 
+    // MUSIC mute/unmute
     void OnMusicToggled(bool enabled)
     {
-        if (MusicManager.Instance != null)
-        {
-            MusicManager.Instance.SetMusicEnabled(enabled);
-        }
+        ApplyMusicMute();
         SaveSettings();
     }
 
-    void OnVolumeChanged(float volume)
+    // MUSIC volume only
+    void OnMusicVolumeChanged(float v)
     {
-        // Set master volume
-        AudioListener.volume = volume;
+        ApplyMusicVolume();
         SaveSettings();
+    }
+
+    void ApplyMusicMute()
+    {
+        bool musicEnabled = musicToggle == null ? true : musicToggle.isOn;
+
+        // Prefer to mute the music AudioSource only (leaves SFX alone)
+        if (musicSource != null)
+        {
+            musicSource.mute = !musicEnabled;
+
+            // If music is disabled, ensure it doesn't auto-play
+            if (!musicEnabled && musicSource.isPlaying)
+                musicSource.Pause();
+            else if (musicEnabled && !musicSource.isPlaying)
+                musicSource.UnPause(); // resumes if it was paused
+        }
+
+        // If you also have a MusicManager that starts/stops music globally, you can keep this optional guard:
+        // (Commented to avoid missing-method compile errors)
+        // if (MusicManager.Instance != null)
+        // {
+        //     if (musicEnabled) MusicManager.Instance.StartBackgroundMusic();
+        //     else MusicManager.Instance.StopBackgroundMusic();
+        // }
+    }
+
+    void ApplyMusicVolume()
+    {
+        float vol = masterVolumeSlider != null ? masterVolumeSlider.value : 1f;
+        if (musicSource != null)
+        {
+            musicSource.volume = vol;
+        }
+        // Do NOT touch AudioListener.volume — that would affect SFX too.
     }
 
     public void QuitGame()
@@ -153,7 +191,7 @@ public class SettingsManager : MonoBehaviour
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
 #else
-            Application.Quit();
+        Application.Quit();
 #endif
     }
 
@@ -175,41 +213,29 @@ public class SettingsManager : MonoBehaviour
     {
         if (generalSoundToggle != null)
         {
-            bool soundEnabled = PlayerPrefs.GetInt("GeneralSound", 1) == 1;
-            generalSoundToggle.isOn = soundEnabled;
-            OnGeneralSoundToggled(soundEnabled);
+            bool sfx = PlayerPrefs.GetInt("GeneralSound", 1) == 1;
+            generalSoundToggle.isOn = sfx;
+            OnGeneralSoundToggled(sfx);
         }
 
         if (musicToggle != null)
         {
-            bool musicEnabled = PlayerPrefs.GetInt("Music", 1) == 1;
-            musicToggle.isOn = musicEnabled;
-            OnMusicToggled(musicEnabled);
+            bool mus = PlayerPrefs.GetInt("Music", 1) == 1;
+            musicToggle.isOn = mus;
+            // don’t call OnMusicToggled here to avoid double saves; just apply
         }
 
         if (masterVolumeSlider != null)
         {
-            float volume = PlayerPrefs.GetFloat("MasterVolume", 1f);
-            masterVolumeSlider.value = volume;
-            OnVolumeChanged(volume);
+            float vol = PlayerPrefs.GetFloat("MasterVolume", 0.45f); // default 45%
+            masterVolumeSlider.value = vol;
         }
+
+
+        // Apply both after values are loaded
+        ApplyMusicMute();
+        ApplyMusicVolume();
     }
 
-    public bool IsSettingsOpen()
-    {
-        return isSettingsOpen;
-    }
-}
-
-// Extension to your InputBasedMainMenuController
-public class MenuMusicTrigger : MonoBehaviour
-{
-    void Start()
-    {
-        // Trigger background music when leaving title screen
-        if (MusicManager.Instance != null)
-        {
-            MusicManager.Instance.StartBackgroundMusic();
-        }
-    }
+    public bool IsSettingsOpen() => isSettingsOpen;
 }
