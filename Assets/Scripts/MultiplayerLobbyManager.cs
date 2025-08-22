@@ -729,7 +729,10 @@ void CancelJoinName()
 
             ShowLobbyRoomPanel();
             AddChatMessage("System", $"{currentPlayerName} joined the lobby.");
-
+            if (networkSync != null)
+            {
+                networkSync.NotifyPlayerJoined(currentPlayerName); // ADD THIS LINE
+            }
             Debug.Log("[JOIN] Join process completed successfully");
         }
         catch (System.Exception e)
@@ -812,6 +815,10 @@ void CancelJoinName()
             directJoinPanel.SetActive(false);
             ShowLobbyRoomPanel();
             AddChatMessage("System", $"{currentPlayerName} joined the lobby.");
+            if (networkSync != null)
+            {
+                networkSync.NotifyPlayerJoined(currentPlayerName);
+            }
         }
         catch (System.Exception e)
         {
@@ -955,19 +962,24 @@ void CancelJoinName()
                 Debug.Log("[UI UPDATE] Black slot: Waiting...");
             }
 
-            // Check if both players are ready
+            // FIXED: Check if both players are ready AND if any player is ready for color swap logic
             bool bothReady = false;
+            bool anyPlayerReady = false;
+
             if (currentUnityLobby.Players.Count == 2 && whitePlayer != null && blackPlayer != null)
             {
                 bool player1Ready = whitePlayer.Data.ContainsKey("IsReady") && whitePlayer.Data["IsReady"].Value == "true";
                 bool player2Ready = blackPlayer.Data.ContainsKey("IsReady") && blackPlayer.Data["IsReady"].Value == "true";
                 bothReady = player1Ready && player2Ready;
+                anyPlayerReady = player1Ready || player2Ready; // NEW: Track if any player is ready
             }
 
-            // Update buttons
+            // FIXED: Update buttons with proper logic
             readyButton.interactable = currentUnityLobby.Players.Count == 2;
             startGameButton.interactable = isHost && bothReady;
-            colorSwapButton.interactable = isHost && currentUnityLobby.Players.Count == 2;
+
+            // FIXED: Color swap only available if host, 2 players present, and NO ONE is ready
+            colorSwapButton.interactable = isHost && currentUnityLobby.Players.Count == 2 && !anyPlayerReady;
 
             // Update ready button text and local player data
             TMP_Text readyButtonText = readyButton.GetComponentInChildren<TMP_Text>();
@@ -1106,6 +1118,7 @@ void CancelJoinName()
         }
     }
 
+
     async void SwapColors()
     {
         if (!isHost || currentUnityLobby == null || currentUnityLobby.Players.Count != 2) return;
@@ -1114,8 +1127,7 @@ void CancelJoinName()
         {
             Debug.Log("[COLOR SWAP] Host initiating color swap via network");
 
-            // Instead of trying to update Unity Lobby directly (which fails),
-            // we'll use our network system to handle the swap
+            // Use network system to handle the swap
             if (networkSync != null)
             {
                 networkSync.RequestColorSwap();
@@ -1127,6 +1139,28 @@ void CancelJoinName()
         {
             Debug.LogError($"Failed to swap colors: {e.Message}");
         }
+    }
+    IEnumerator ReEnableColorSwapButton()
+    {
+        yield return new WaitForSeconds(1f); // Wait for network sync to complete
+
+        // Check if swap is still allowed (no one became ready during the swap)
+        bool anyPlayerReady = false;
+        if (currentUnityLobby != null)
+        {
+            foreach (var player in currentUnityLobby.Players)
+            {
+                if (player.Data.ContainsKey("IsReady") && player.Data["IsReady"].Value == "true")
+                {
+                    anyPlayerReady = true;
+                    break;
+                }
+            }
+        }
+
+        // Only re-enable if conditions are still met
+        colorSwapButton.interactable = isHost && currentUnityLobby != null &&
+                                      currentUnityLobby.Players.Count == 2 && !anyPlayerReady;
     }
 
     void StartGame()
@@ -1362,9 +1396,10 @@ void CancelJoinName()
             Debug.Log($"[COLOR SWAP] After: Remote player {remotePlayer.playerName} is now {remotePlayer.color}");
         }
 
-        // Force immediate UI update
-        Debug.Log("[COLOR SWAP] Forcing UI update");
+        // FIXED: Force immediate UI update to show the color swap
+        Debug.Log("[COLOR SWAP] Forcing immediate UI update");
         UpdateDisplayedPlayerSlots();
+        lastUIUpdateTime = Time.time + 3f;
     }
 
     void UpdateDisplayedPlayerSlots()

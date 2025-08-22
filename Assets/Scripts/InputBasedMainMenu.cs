@@ -161,6 +161,7 @@ public class InputBasedMainMenuController : MonoBehaviour
         // Disable main menu
         if (mainMenuPanel != null)
             mainMenuPanel.SetActive(false);
+        
     }
 
     // Optional: Public methods for external access (matching your original structure)

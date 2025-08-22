@@ -9,6 +9,7 @@ using System.Linq;
 public class BlindfoldUI : MonoBehaviour
 {
     [Header("UI References")]
+    public Button newGameButton;
     public TMP_InputField moveInputField;
     public TMP_Text moveLogText;
     public TMP_Text errorMessageText;
@@ -31,7 +32,7 @@ public class BlindfoldUI : MonoBehaviour
     public Sprite blackRookSprite;
     public Sprite blackQueenSprite;
     public Sprite blackKingSprite;
-
+    public Button resignButton;
     [Header("Settings")]
     public int maxRevealCount = 3;
     public float revealDuration = 3f;
@@ -41,7 +42,7 @@ public class BlindfoldUI : MonoBehaviour
     // References - HIDDEN from inspector
     private ChessRules chessRules;
     private ChessAI chessAI;
-
+    private bool isRevealInProgress = false;
     // Public methods to set references
     public void SetChessRules(ChessRules rules) { chessRules = rules; }
     public void SetChessAI(ChessAI ai)
@@ -91,7 +92,6 @@ public class BlindfoldUI : MonoBehaviour
 
         UpdateRevealButtonText();
     }
-
     void SetupEventListeners()
     {
         // Input field events
@@ -104,21 +104,73 @@ public class BlindfoldUI : MonoBehaviour
         revealBoardButton.onClick.RemoveAllListeners();
         revealBoardButton.onClick.AddListener(OnRevealBoardClicked);
 
+        // Resign button
+        if (resignButton != null)
+        {
+            resignButton.onClick.RemoveAllListeners();
+            resignButton.onClick.AddListener(ResignGame);
+        }
+        if (newGameButton != null)
+        {
+            newGameButton.onClick.RemoveAllListeners();
+            newGameButton.onClick.AddListener(StartNewGame);
+            newGameButton.gameObject.SetActive(false); // Hidden by default
+        }
+
         // Dropdown events
         if (difficultyDropdown != null)
         {
             difficultyDropdown.onValueChanged.RemoveAllListeners();
             difficultyDropdown.onValueChanged.AddListener(OnDifficultyChanged);
         }
-
-        // AI events
     }
 
     #region Input Handling
+    void ProcessSlashCommand(string command)
+    {
+        string cmd = command.ToLower();
+        moveInputField.text = "";
 
+        switch (cmd)
+        {
+            case "/resign":
+                ResignGame();
+                break;
+
+            case "/save":
+                OnSaveLogClicked();
+                break;
+
+            case "/newgame":
+            case "/restart":
+                ResetGame();
+                break;
+
+            default:
+                ShowErrorMessage($"Unknown command: {command}. Available: /resign, /save, /newgame");
+                break;
+        }
+
+        RefocusInputField();
+    }
+    public void StartNewGame()
+    {
+        if (newGameButton != null)
+            newGameButton.gameObject.SetActive(false);
+
+        ResetGame();
+    }
     void OnPlayerMoveSubmitted(string playerMove)
     {
         UnityEngine.Debug.Log($"Player submitted move: '{playerMove}'");
+
+        // Check for slash commands first
+        if (!string.IsNullOrWhiteSpace(playerMove) && playerMove.Trim().StartsWith("/"))
+        {
+            ProcessSlashCommand(playerMove.Trim());
+            return;
+        }
+
         ProcessPlayerMove(playerMove);
     }
 
@@ -243,6 +295,8 @@ public class BlindfoldUI : MonoBehaviour
             moveLogText.text += $"\nCheckmate! {winner} wins!\n";
             ShowErrorMessage($"Checkmate! {winner} wins!");
             moveInputField.interactable = false;
+            RevealBoardPermanently();
+            if (newGameButton != null) newGameButton.gameObject.SetActive(true); // ADD THIS
             return;
         }
 
@@ -251,6 +305,8 @@ public class BlindfoldUI : MonoBehaviour
             moveLogText.text += "\nStalemate! The game is a draw.\n";
             ShowErrorMessage("Stalemate! The game is a draw.");
             moveInputField.interactable = false;
+            RevealBoardPermanently();
+            if (newGameButton != null) newGameButton.gameObject.SetActive(true); // ADD THIS
             return;
         }
 
@@ -259,6 +315,8 @@ public class BlindfoldUI : MonoBehaviour
             moveLogText.text += "\nDraw by threefold repetition!\n";
             ShowErrorMessage("Draw by threefold repetition!");
             moveInputField.interactable = false;
+            RevealBoardPermanently();
+            if (newGameButton != null) newGameButton.gameObject.SetActive(true); // ADD THIS
             return;
         }
 
@@ -267,6 +325,8 @@ public class BlindfoldUI : MonoBehaviour
             moveLogText.text += "\nDraw by insufficient material!\n";
             ShowErrorMessage("Draw by insufficient material!");
             moveInputField.interactable = false;
+            RevealBoardPermanently();
+            if (newGameButton != null) newGameButton.gameObject.SetActive(true); // ADD THIS
             return;
         }
 
@@ -550,22 +610,61 @@ public class BlindfoldUI : MonoBehaviour
         ShowErrorMessage($"Difficulty set to {difficultyName}.");
         StartCoroutine(FocusInputField());
     }
-
-    public void OnRevealBoardClicked()
-{
-    if (currentRevealCount > 0)
+    void ResignGame()
     {
+        if (!isDifficultySet)
+        {
+            ShowErrorMessage("No active game to resign from.");
+            return;
+        }
+
+        moveLogText.text += "\n\nYou resigned. AI wins!\n";
+        ShowErrorMessage("You resigned. AI wins!");
+        moveInputField.interactable = false;
+
+        if (resignButton != null)
+            resignButton.interactable = false;
+
+        // NEW: Permanently reveal board after resignation
+        RevealBoardPermanently();
+
+        // ADD THIS LINE:
+        if (newGameButton != null)
+            newGameButton.gameObject.SetActive(true);
+
+        UnityEngine.Debug.Log("Player resigned the game");
+    }
+    void RevealBoardPermanently()
+    {
+        UnityEngine.Debug.Log("Revealing board permanently after game end");
+        chessBoardObject.SetActive(true);
+        SpawnAllPieces();
+
+        // Update reveal button to show board is permanently visible
+        var txt = revealBoardButton.GetComponentInChildren<TMP_Text>();
+        if (txt != null)
+        {
+            txt.text = "Board Revealed";
+            revealBoardButton.interactable = false;
+        }
+    }
+    public void OnRevealBoardClicked()
+    {
+        if (currentRevealCount <= 0 || isRevealInProgress)
+        {
+            if (currentRevealCount <= 0)
+                ShowErrorMessage("No reveals left!");
+            return;
+        }
+
         currentRevealCount--;
-        UIButtonHoverSound.Instance.PlayReveal();       // start sound
+        isRevealInProgress = true;
+        revealBoardButton.interactable = false;
+
+        UIButtonHoverSound.Instance.PlayReveal();
         StartCoroutine(RevealBoardTemporarily());
         UpdateRevealButtonText();
     }
-    else
-    {
-        ShowErrorMessage("No reveals left!");
-        // (UpdateRevealButtonText will disable the button)
-    }
-}
 
     #endregion
 
@@ -580,7 +679,15 @@ public class BlindfoldUI : MonoBehaviour
 
         chessBoardObject.SetActive(false);
 
-        UIButtonHoverSound.Instance.PlayRevealEnd();    // end of reveal SFX
+        // Re-enable reveal button if there are reveals left
+        isRevealInProgress = false;
+        if (currentRevealCount > 0)
+        {
+            revealBoardButton.interactable = true;
+        }
+
+        UIButtonHoverSound.Instance.PlayRevealEnd();
+        UpdateRevealButtonText();
     }
 
 
@@ -782,6 +889,7 @@ public class BlindfoldUI : MonoBehaviour
     {
         // Reset UI state
         currentRevealCount = maxRevealCount;
+        isRevealInProgress = false;
         moveHistory.Clear();
         moveLogText.text = "Type your moves (e.g., e4, Nf3)";
         moveInputField.text = "";
@@ -800,11 +908,14 @@ public class BlindfoldUI : MonoBehaviour
         }
 
         ClearAllPieceObjects();
-        chessBoardObject.SetActive(false);
+        chessBoardObject.SetActive(false); // NEW: Hide board again for new game
         UpdateRevealButtonText();
 
         if (revealBoardButton != null)
             revealBoardButton.interactable = true;
+
+        if (resignButton != null)
+            resignButton.interactable = true;
 
         // Reset game components
         if (chessRules != null)
@@ -819,7 +930,6 @@ public class BlindfoldUI : MonoBehaviour
 
         StartCoroutine(FocusInputField());
     }
-
     public void OnSaveLogClicked()
     {
         string logText = moveLogText.text;
@@ -841,37 +951,45 @@ public class BlindfoldUI : MonoBehaviour
 
     #region Utility Methods
 
-  /**   void UpdateRevealButtonText()
-    {
-        if (revealBoardButton != null)
-        {
-            TMP_Text buttonText = revealBoardButton.GetComponentInChildren<TMP_Text>();
-            if (buttonText != null)
-            {
-                if (currentRevealCount > 0)
-                    buttonText.text = $"Reveal Board ({currentRevealCount} left)";
-                else
-                {
-                    buttonText.text = "No Reveals Left";
-                    revealBoardButton.interactable = false;
-                }
-            }
-        }
-    } */  
+    /**   void UpdateRevealButtonText()
+      {
+          if (revealBoardButton != null)
+          {
+              TMP_Text buttonText = revealBoardButton.GetComponentInChildren<TMP_Text>();
+              if (buttonText != null)
+              {
+                  if (currentRevealCount > 0)
+                      buttonText.text = $"Reveal Board ({currentRevealCount} left)";
+                  else
+                  {
+                      buttonText.text = "No Reveals Left";
+                      revealBoardButton.interactable = false;
+                  }
+              }
+          }
+      } */
     void UpdateRevealButtonText()
-{
-    var txt = revealBoardButton.GetComponentInChildren<TMP_Text>();
-    if (currentRevealCount > 0)
     {
-        txt.text = $"Reveal Board ({currentRevealCount} left)";
-        revealBoardButton.interactable = true;
+        var txt = revealBoardButton.GetComponentInChildren<TMP_Text>();
+        if (currentRevealCount > 0 && !isRevealInProgress)
+        {
+            txt.text = $"Reveal Board ({currentRevealCount} left)";
+            revealBoardButton.interactable = true;
+        }
+        else if (isRevealInProgress)
+        {
+            txt.text = "Revealing...";
+            revealBoardButton.interactable = false;
+        }
+        else
+        {
+            txt.text = "No Reveals Left";
+            revealBoardButton.interactable = false;
+        }
     }
-    else
-    {
-        txt.text = "No Reveals Left";
-        revealBoardButton.interactable = false;
-    }
-}
+
+    // Add resign button setup to your SetupEventListeners method:
+    
 
     void ShowErrorMessage(string message)
     {

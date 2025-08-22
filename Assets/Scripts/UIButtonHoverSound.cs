@@ -1,11 +1,7 @@
+
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-/// <summary>
-/// Centralized sound manager for UI and game events.
-/// Handles hover, click, reveal, capture, check, checkmate, stalemate, and answer sounds.
-/// Attach to a persistent GameObject and assign the clips in the Inspector.
-/// </summary>
 public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerClickHandler
 {
     public static UIButtonHoverSound Instance { get; private set; }
@@ -13,16 +9,15 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
     [Header("Audio Source")]
     public AudioSource audioSource;
 
-
     [Header("UI Sounds")]
     public AudioClip hoverClip;
     public AudioClip clickClip;
     public AudioClip switchClip;
-
+    public AudioClip notificationClip;  // NEW: Notification sound
 
     [Header("Game Sounds")]
     public AudioClip revealClip;
-    public AudioClip revealEndClip; 
+    public AudioClip revealEndClip;
     public AudioClip captureClip;
     public AudioClip checkClip;
     public AudioClip checkmateClip;
@@ -33,6 +28,7 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
     public AudioClip correctClip;
     public AudioClip wrongClip;
 
+    [Header("Move Sounds")]
     public AudioClip[] moveClips;
 
     void Awake()
@@ -46,12 +42,10 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
         DontDestroyOnLoad(gameObject);
     }
 
-
     public void PlayRandomMove()
     {
-        if (audioSource == null || moveClips == null || moveClips.Length == 0) 
+        if (audioSource == null || moveClips == null || moveClips.Length == 0)
             return;
-
         int idx = Random.Range(0, moveClips.Length);
         var clip = moveClips[idx];
         if (clip != null)
@@ -60,6 +54,7 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
 
     // UI hover
     public void OnPointerEnter(PointerEventData eventData) => PlayHover();
+
     // UI click
     public void OnPointerClick(PointerEventData eventData) => PlayClick();
 
@@ -75,11 +70,19 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
             audioSource.PlayOneShot(clickClip);
     }
 
+    // NEW: Notification sound method
+    public void PlayNotification()
+    {
+        if (audioSource != null && notificationClip != null)
+            audioSource.PlayOneShot(notificationClip);
+    }
+
     public void PlayReveal()
     {
         if (audioSource != null && revealClip != null)
             audioSource.PlayOneShot(revealClip);
     }
+
     public void PlayRevealEnd()
     {
         if (audioSource != null && revealEndClip != null)
@@ -97,8 +100,6 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
         if (audioSource != null && checkClip != null)
             audioSource.PlayOneShot(checkClip);
     }
-
-    
 
     public void PlayCheckmate()
     {
@@ -124,18 +125,17 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
             audioSource.PlayOneShot(castleClip);
     }
 
-
     public void PlayWrong()
     {
         if (audioSource != null && wrongClip != null)
             audioSource.PlayOneShot(wrongClip);
     }
+
     public void PlaySwitch()
     {
         if (audioSource != null && switchClip != null)
             audioSource.PlayOneShot(switchClip);
     }
-
 
     // Alias methods for existing calls
     public void PlayCorrectSound()
@@ -147,7 +147,4 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
     {
         PlayWrong();
     }
-
-
-
 }
