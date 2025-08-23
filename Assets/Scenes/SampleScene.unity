@@ -1703,7 +1703,7 @@ MonoBehaviour:
     m_FadeDuration: 0.1
   m_SpriteState:
     m_HighlightedSprite: {fileID: 21300000, guid: d0a2f2c068931464c978cb8ce16681e0, type: 3}
-    m_PressedSprite: {fileID: 0}
+    m_PressedSprite: {fileID: 21300000, guid: 98d581fbdfea8ee4cb13cbd5a2ea15fe, type: 3}
     m_SelectedSprite: {fileID: 0}
     m_DisabledSprite: {fileID: 0}
   m_AnimationTriggers:
@@ -4410,7 +4410,6 @@ GameObject:
   - component: {fileID: 291945813}
   - component: {fileID: 291945814}
   - component: {fileID: 291945815}
-  - component: {fileID: 291945816}
   m_Layer: 5
   m_Name: ChessBoardPanelOnline
   m_TagString: Untagged
@@ -4513,18 +4512,6 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 638074db337bb464f933f653b464060f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
---- !u!114 &291945816
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 291945807}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d441efd307f6f654f8e05c4d5fc94163, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
 --- !u!1 &296574095
@@ -9263,7 +9250,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &520800213
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -15764,7 +15751,7 @@ MonoBehaviour:
     m_FadeDuration: 0.1
   m_SpriteState:
     m_HighlightedSprite: {fileID: 21300000, guid: d0a2f2c068931464c978cb8ce16681e0, type: 3}
-    m_PressedSprite: {fileID: 0}
+    m_PressedSprite: {fileID: 21300000, guid: 98d581fbdfea8ee4cb13cbd5a2ea15fe, type: 3}
     m_SelectedSprite: {fileID: 0}
     m_DisabledSprite: {fileID: 0}
   m_AnimationTriggers:
@@ -22308,7 +22295,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1523223013
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -25492,7 +25479,15 @@ MonoBehaviour:
   - {fileID: 1764307983}
   - {fileID: 1261774006}
   - {fileID: 1066019294}
-  extraExclusions: []
+  - {fileID: 1836506979}
+  - {fileID: 272079115}
+  extraExclusions:
+  - {fileID: 1764307983}
+  - {fileID: 516268912}
+  - {fileID: 1261774006}
+  - {fileID: 1066019294}
+  - {fileID: 1836506979}
+  - {fileID: 272079115}
 --- !u!1 &1764414957
 GameObject:
   m_ObjectHideFlags: 0
@@ -27158,18 +27153,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-<<<<<<< HEAD
-<<<<<<< HEAD
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: -1035.8743, y: 0}
-=======
   m_AnchoredPosition: {x: 53, y: -1}
   m_SizeDelta: {x: -797.06116, y: 2}
->>>>>>> 5ac029a6751110151aeb552277209e37366bfb65
-=======
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: -1035.8743, y: 0}
->>>>>>> recovery
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1884592273
 MonoBehaviour:
@@ -28691,7 +28676,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1071038021}
   m_HandleRect: {fileID: 1071038020}
   m_Direction: 2
-  m_Value: 0
+  m_Value: 1
   m_Size: 1
   m_NumberOfSteps: 0
   m_OnValueChanged:
