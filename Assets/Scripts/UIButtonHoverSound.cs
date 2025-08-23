@@ -1,4 +1,3 @@
-
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -13,7 +12,7 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
     public AudioClip hoverClip;
     public AudioClip clickClip;
     public AudioClip switchClip;
-    public AudioClip notificationClip;  // NEW: Notification sound
+    public AudioClip notificationClip;
 
     [Header("Game Sounds")]
     public AudioClip revealClip;
@@ -31,32 +30,44 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
     [Header("Move Sounds")]
     public AudioClip[] moveClips;
 
+    // Dedicated source for notifications that can play while background-muted
+    private AudioSource notificationSource;
+
     void Awake()
     {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
+        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         DontDestroyOnLoad(gameObject);
+
+        // Let audio/network tick while alt-tabbed
+        Application.runInBackground = true;
+
+        // Dedicated source that plays even if AudioListener is paused
+        notificationSource = gameObject.AddComponent<AudioSource>();
+        notificationSource.playOnAwake = false;
+        notificationSource.ignoreListenerPause = true;
+        if (audioSource != null)
+            notificationSource.outputAudioMixerGroup = audioSource.outputAudioMixerGroup;
     }
 
-    public void PlayRandomMove()
-    {
-        if (audioSource == null || moveClips == null || moveClips.Length == 0)
-            return;
-        int idx = Random.Range(0, moveClips.Length);
-        var clip = moveClips[idx];
-        if (clip != null)
-            audioSource.PlayOneShot(clip);
-    }
+    // Pause all other sounds when unfocused; notificationSource ignores this
+    void OnApplicationFocus(bool hasFocus) { AudioListener.pause = !hasFocus; }
+    void OnApplicationPause(bool paused) { if (paused) AudioListener.pause = true; }
 
-    // UI hover
     public void OnPointerEnter(PointerEventData eventData) => PlayHover();
-
-    // UI click
     public void OnPointerClick(PointerEventData eventData) => PlayClick();
+
+    public void PlayNotification()
+    {
+        if (notificationSource != null && notificationClip != null)
+            notificationSource.PlayOneShot(notificationClip);
+    }
+
+    public void PlayCastle()
+    {
+        if (audioSource != null && castleClip != null)
+            audioSource.PlayOneShot(castleClip);
+    }
 
     public void PlayHover()
     {
@@ -68,13 +79,6 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
     {
         if (audioSource != null && clickClip != null)
             audioSource.PlayOneShot(clickClip);
-    }
-
-    // NEW: Notification sound method
-    public void PlayNotification()
-    {
-        if (audioSource != null && notificationClip != null)
-            audioSource.PlayOneShot(notificationClip);
     }
 
     public void PlayReveal()
@@ -113,38 +117,19 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
             audioSource.PlayOneShot(stalemateClip);
     }
 
-    public void PlayCorrect()
+    public void PlayCorrect()  { if (audioSource != null && correctClip != null) audioSource.PlayOneShot(correctClip); }
+    public void PlayWrong()    { if (audioSource != null && wrongClip   != null) audioSource.PlayOneShot(wrongClip); }
+    public void PlaySwitch()   { if (audioSource != null && switchClip  != null) audioSource.PlayOneShot(switchClip); }
+
+    public void PlayRandomMove()
     {
-        if (audioSource != null && correctClip != null)
-            audioSource.PlayOneShot(correctClip);
+        if (audioSource == null || moveClips == null || moveClips.Length == 0) return;
+        int idx = Random.Range(0, moveClips.Length);
+        var clip = moveClips[idx];
+        if (clip != null) audioSource.PlayOneShot(clip);
     }
 
-    public void PlayCastle()
-    {
-        if (audioSource != null && castleClip != null)
-            audioSource.PlayOneShot(castleClip);
-    }
-
-    public void PlayWrong()
-    {
-        if (audioSource != null && wrongClip != null)
-            audioSource.PlayOneShot(wrongClip);
-    }
-
-    public void PlaySwitch()
-    {
-        if (audioSource != null && switchClip != null)
-            audioSource.PlayOneShot(switchClip);
-    }
-
-    // Alias methods for existing calls
-    public void PlayCorrectSound()
-    {
-        PlayCorrect();
-    }
-
-    public void PlayWrongSound()
-    {
-        PlayWrong();
-    }
+    // Aliases
+    public void PlayCorrectSound() => PlayCorrect();
+    public void PlayWrongSound()   => PlayWrong();
 }

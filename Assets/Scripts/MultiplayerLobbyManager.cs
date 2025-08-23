@@ -44,6 +44,10 @@ public class PlayerData
 
 public class MultiplayerLobbyManager : MonoBehaviour
 {
+        // Track who we've already seen in this lobby
+    private HashSet<string> _knownMemberIds = new HashSet<string>();
+    private bool _initializedKnownMembers = false;
+
     [Header("Chat UI")]
     public ScrollRect chatScrollRect;
 
@@ -190,6 +194,35 @@ public class MultiplayerLobbyManager : MonoBehaviour
         if (transport == null)
         {
             Debug.LogError("[INIT] UnityTransport component not found on NetworkManager!");
+        }
+    }
+
+    void DetectJoinsAndNotifyHost(Lobby lobby)
+    {
+        if (lobby == null || lobby.Players == null) return;
+
+        // Only host should hear the notification
+        bool isHost = AuthenticationService.Instance.PlayerId == lobby.HostId;
+        if (!_initializedKnownMembers) { PrimeKnownMembers(lobby); return; }
+
+        foreach (var p in lobby.Players)
+        {
+            if (string.IsNullOrEmpty(p.Id)) continue;
+            if (_knownMemberIds.Contains(p.Id)) continue;
+
+            // New player detected
+            _knownMemberIds.Add(p.Id);
+
+            if (isHost)
+            {
+                // Don’t notify for yourself (defensive)
+                if (p.Id != AuthenticationService.Instance.PlayerId)
+                {
+                    Debug.Log("[Lobby] New member joined → host notification");
+                    if (UIButtonHoverSound.Instance != null)
+                        UIButtonHoverSound.Instance.PlayNotification();
+                }
+            }
         }
     }
 
@@ -391,6 +424,7 @@ public class MultiplayerLobbyManager : MonoBehaviour
             };
 
             currentUnityLobby = await LobbyService.Instance.CreateLobbyAsync(lobbyName, 2, options);
+            PrimeKnownMembers(currentUnityLobby);
 
             Debug.Log($"[SUCCESS] Created lobby: {currentUnityLobby.Name} (ID: {currentUnityLobby.Id})");
             Debug.Log($"[SUCCESS] Lobby Code: {currentUnityLobby.LobbyCode}");
@@ -657,6 +691,16 @@ void CancelJoinName()
         pendingLobby = null;
     }
 
+    void PrimeKnownMembers(Lobby lobby)
+    {
+        _knownMemberIds.Clear();
+        if (lobby?.Players != null)
+            foreach (var p in lobby.Players)
+                if (!string.IsNullOrEmpty(p.Id))
+                    _knownMemberIds.Add(p.Id);
+        _initializedKnownMembers = true;
+    }
+
     async void JoinLobby(Lobby lobby)
     {
         try
@@ -689,6 +733,7 @@ void CancelJoinName()
 
             // Join the lobby
             currentUnityLobby = await LobbyService.Instance.JoinLobbyByIdAsync(lobby.Id, options);
+            PrimeKnownMembers(currentUnityLobby);
             Debug.Log("[JOIN] Successfully joined Unity Lobby");
 
             // Get relay code and join relay
@@ -784,6 +829,7 @@ void CancelJoinName()
             };
 
             currentUnityLobby = await LobbyService.Instance.JoinLobbyByCodeAsync(code, options);
+            PrimeKnownMembers(currentUnityLobby);
 
             string relayJoinCode = currentUnityLobby.Data["JoinCode"].Value;
             JoinAllocation joinAllocation = await RelayService.Instance.JoinAllocationAsync(relayJoinCode);
@@ -885,6 +931,7 @@ void CancelJoinName()
         {
             // Get the latest lobby state
             currentUnityLobby = await LobbyService.Instance.GetLobbyAsync(currentUnityLobby.Id);
+            DetectJoinsAndNotifyHost(currentUnityLobby);
 
             // Check if lobby still exists and has players
             if (currentUnityLobby.Players.Count == 0)
