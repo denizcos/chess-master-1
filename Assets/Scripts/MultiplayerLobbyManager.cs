@@ -45,8 +45,8 @@ public class PlayerData
 public class MultiplayerLobbyManager : MonoBehaviour
 {
         // Track who we've already seen in this lobby
-    private HashSet<string> _knownMemberIds = new HashSet<string>();
-    private bool _initializedKnownMembers = false;
+    private HashSet<string> _prevMemberIds = new HashSet<string>();
+    private bool _hasPrevSnapshot = false;
 
     [Header("Chat UI")]
     public ScrollRect chatScrollRect;
@@ -197,34 +197,59 @@ public class MultiplayerLobbyManager : MonoBehaviour
         }
     }
 
+    void SnapshotMembers(Lobby lobby)
+    {
+        _prevMemberIds.Clear();
+        if (lobby?.Players != null)
+        {
+            foreach (var p in lobby.Players)
+            {
+                if (!string.IsNullOrEmpty(p.Id))
+                    _prevMemberIds.Add(p.Id);
+            }
+        }
+        _hasPrevSnapshot = true;
+    }
+
     void DetectJoinsAndNotifyHost(Lobby lobby)
     {
         if (lobby == null || lobby.Players == null) return;
 
-        // Only host should hear the notification
-        bool isHost = AuthenticationService.Instance.PlayerId == lobby.HostId;
-        if (!_initializedKnownMembers) { PrimeKnownMembers(lobby); return; }
+        bool isHostHere = AuthenticationService.Instance.PlayerId == lobby.HostId;
 
+        // Build current snapshot
+        var curr = new HashSet<string>();
         foreach (var p in lobby.Players)
         {
-            if (string.IsNullOrEmpty(p.Id)) continue;
-            if (_knownMemberIds.Contains(p.Id)) continue;
+            if (!string.IsNullOrEmpty(p.Id))
+                curr.Add(p.Id);
+        }
 
-            // New player detected
-            _knownMemberIds.Add(p.Id);
+        // First time: just snapshot, no notifications
+        if (!_hasPrevSnapshot)
+        {
+            SnapshotMembers(lobby);
+            return;
+        }
 
-            if (isHost)
+        // Newly added members (curr - prev)
+        foreach (var id in curr)
+        {
+            if (!_prevMemberIds.Contains(id))
             {
-                // Don’t notify for yourself (defensive)
-                if (p.Id != AuthenticationService.Instance.PlayerId)
+                if (isHostHere && id != AuthenticationService.Instance.PlayerId)
                 {
                     Debug.Log("[Lobby] New member joined → host notification");
-                    if (UIButtonHoverSound.Instance != null)
-                        UIButtonHoverSound.Instance.PlayNotification();
+                    UIButtonHoverSound.Instance?.PlayNotification();
                 }
             }
         }
+
+        // Update snapshot (this forgets leavers so re-joins will notify again)
+        _prevMemberIds = curr;
+        _hasPrevSnapshot = true;
     }
+
 
     void InitializeUI()
     {
@@ -424,7 +449,7 @@ public class MultiplayerLobbyManager : MonoBehaviour
             };
 
             currentUnityLobby = await LobbyService.Instance.CreateLobbyAsync(lobbyName, 2, options);
-            PrimeKnownMembers(currentUnityLobby);
+            SnapshotMembers(currentUnityLobby);
 
             Debug.Log($"[SUCCESS] Created lobby: {currentUnityLobby.Name} (ID: {currentUnityLobby.Id})");
             Debug.Log($"[SUCCESS] Lobby Code: {currentUnityLobby.LobbyCode}");
@@ -691,16 +716,6 @@ void CancelJoinName()
         pendingLobby = null;
     }
 
-    void PrimeKnownMembers(Lobby lobby)
-    {
-        _knownMemberIds.Clear();
-        if (lobby?.Players != null)
-            foreach (var p in lobby.Players)
-                if (!string.IsNullOrEmpty(p.Id))
-                    _knownMemberIds.Add(p.Id);
-        _initializedKnownMembers = true;
-    }
-
     async void JoinLobby(Lobby lobby)
     {
         try
@@ -733,7 +748,7 @@ void CancelJoinName()
 
             // Join the lobby
             currentUnityLobby = await LobbyService.Instance.JoinLobbyByIdAsync(lobby.Id, options);
-            PrimeKnownMembers(currentUnityLobby);
+            SnapshotMembers(currentUnityLobby);
             Debug.Log("[JOIN] Successfully joined Unity Lobby");
 
             // Get relay code and join relay
@@ -829,7 +844,7 @@ void CancelJoinName()
             };
 
             currentUnityLobby = await LobbyService.Instance.JoinLobbyByCodeAsync(code, options);
-            PrimeKnownMembers(currentUnityLobby);
+            SnapshotMembers(currentUnityLobby);
 
             string relayJoinCode = currentUnityLobby.Data["JoinCode"].Value;
             JoinAllocation joinAllocation = await RelayService.Instance.JoinAllocationAsync(relayJoinCode);
@@ -900,6 +915,9 @@ void CancelJoinName()
                 NetworkManager.Singleton.Shutdown();
             }
 
+            // reset join-tracking so the next lobby starts fresh
+            ResetMemberSnapshot();
+
             currentUnityLobby = null;
             currentLobbyId = null;
 
@@ -910,6 +928,7 @@ void CancelJoinName()
             Debug.LogError($"Error leaving lobby: {e.Message}");
         }
     }
+
 
     #endregion
 
@@ -1208,6 +1227,12 @@ void CancelJoinName()
         // Only re-enable if conditions are still met
         colorSwapButton.interactable = isHost && currentUnityLobby != null &&
                                       currentUnityLobby.Players.Count == 2 && !anyPlayerReady;
+    }
+
+    void ResetMemberSnapshot()
+    {
+        _prevMemberIds.Clear();
+        _hasPrevSnapshot = false;
     }
 
     void StartGame()
