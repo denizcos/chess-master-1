@@ -47,6 +47,9 @@ public class MultiplayerLobbyManager : MonoBehaviour
         // Track who we've already seen in this lobby
     private HashSet<string> _prevMemberIds = new HashSet<string>();
     private bool _hasPrevSnapshot = false;
+    // True once a game ends normally (checkmate, stalemate, draw, resign, etc.)
+    private bool matchFinished = false;
+
 
     [Header("Chat UI")]
     public ScrollRect chatScrollRect;
@@ -308,6 +311,7 @@ public class MultiplayerLobbyManager : MonoBehaviour
 
     public void ShowLobbyListPanel()
 {
+    matchFinished = false;
     // Make panels mutually exclusive
     if (gamePanel) gamePanel.SetActive(false);
     if (lobbyRoomPanel) lobbyRoomPanel.SetActive(false);
@@ -363,6 +367,7 @@ public class MultiplayerLobbyManager : MonoBehaviour
 
     public void ShowGamePanel()
     {
+        matchFinished = false;
         if (lobbyListPanel) lobbyListPanel.SetActive(false);
         if (createLobbyPanel) createLobbyPanel.SetActive(false);
         if (lobbyRoomPanel) lobbyRoomPanel.SetActive(false);
@@ -1117,21 +1122,32 @@ void CancelJoinName()
     }
 
     void HandlePlayerDisconnection(string message)
+{
+    // If a normal game result (draw, checkmate, etc.) already happened, ignore disconnects
+    if (matchFinished)
     {
-        Debug.Log($"[DISCONNECT] {message}");
+        Debug.Log($"[DISCONNECT] Ignored because match already finished. ({message})");
 
-        // If we're in a game, end it
-        if (gamePanel.activeSelf && multiplayerUI != null)
-        {
-            multiplayerUI.EndGame($"Opponent disconnected. You win!");
-        }
-
-        // Show message and return to lobby list
-        AddChatMessage("System", message);
-
-        // Clean up and return to lobby list
+        // Still clean up and return to lobby — but don't show messages or "You win"
         StartCoroutine(DelayedReturnToLobbyList(message));
+        return;
     }
+
+    Debug.Log($"[DISCONNECT] {message}");
+
+    // If we're in a game, end it with the "you win" overlay
+    if (gamePanel.activeSelf && multiplayerUI != null)
+    {
+        multiplayerUI.EndGame("Opponent disconnected. You win!");
+    }
+
+    // Show message in chat log
+    AddChatMessage("System", message);
+
+    // Clean up and return to lobby list
+    StartCoroutine(DelayedReturnToLobbyList(message));
+}
+
 
     IEnumerator DelayedReturnToLobbyList(string message)
     {
@@ -1430,15 +1446,18 @@ void CancelJoinName()
     }
 
     public void EndGame(string result)
-    {
-        AddChatMessage("System", $"Game ended: {result}");
+{
+    matchFinished = true; // <-- add this line
 
-        if (currentUnityLobby != null)
-        {
-            // Reset ready state
-            ToggleReady();
-        }
+    AddChatMessage("System", $"Game ended: {result}");
+
+    if (currentUnityLobby != null)
+    {
+        // Reset ready state
+        ToggleReady();
     }
+}
+
 
     public void SwapPlayerColors()
     {
@@ -1658,6 +1677,7 @@ public async void ReturnToLobbyListImmediate()
         Debug.LogError($"[ReturnToLobbyListImmediate] Failed: {e.Message}");
         // fall back to best-effort
         if (gamePanel) gamePanel.SetActive(false);
+        matchFinished = false;
         ShowLobbyListPanel();
     }
 }
