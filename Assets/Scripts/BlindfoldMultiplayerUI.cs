@@ -21,6 +21,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     public Button drawOfferButton;
     public Button saveLogButton;
     public ScrollRect moveLogScrollRect;
+    public Button newGameButton; // shown after game ends
 
     [Header("Player Info")]
     public TMP_Text localPlayerNameText;
@@ -90,6 +91,21 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         remotePlayer = remote;
         lobbyManager = lobby;
         networkSync = FindFirstObjectByType<ChessNetworkSync>();
+        HardResetUIForNewSession();
+
+    // hook New Game button once
+    if (newGameButton)
+    {
+        newGameButton.onClick.RemoveAllListeners();
+        newGameButton.onClick.AddListener(() =>
+        {
+            // ask LobbyManager to take us back to Lobby List & reset everything
+            if (lobbyManager) lobbyManager.ReturnToLobbyListImmediate();
+            // also reset our own UI immediately so if user re-enters mode it's clean
+            HardResetUIForNewSession();
+        });
+        newGameButton.gameObject.SetActive(false); // only show on game over
+    }
 
         Debug.Log($"[GAME INIT] Local player: {localPlayer.playerName} ({localPlayer.color})");
         Debug.Log($"[GAME INIT] Remote player: {remotePlayer.playerName} ({remotePlayer.color})");
@@ -1042,6 +1058,8 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
 
         moveLogText.text += $"\n\n=== GAME OVER ===\n{result}\n";
         ShowMessage(result);
+        if (newGameButton) newGameButton.gameObject.SetActive(true);
+
 
         // Notify lobby manager
         lobbyManager.EndGame(result);
@@ -1441,6 +1459,55 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
             return ((char)('a' + fromCol)).ToString() + (8 - fromRow).ToString();
         }
     }
+
+    // Call this before starting a fresh session / when leaving the finished game
+        public void HardResetUIForNewSession()
+    {
+        // stop any reveals
+        isRevealInProgress = false;
+
+        // hide error bubble
+        if (errorMessageText) errorMessageText.gameObject.SetActive(false);
+
+        // clear turn & indicators
+        if (turnIndicatorText) { turnIndicatorText.text = ""; turnIndicatorText.color = Color.white; }
+        if (localPlayerIndicator) localPlayerIndicator.color = inactivePlayerColor;
+        if (remotePlayerIndicator) remotePlayerIndicator.color = inactivePlayerColor;
+
+        // clear log & input
+        if (moveLogText) moveLogText.text = "";
+        if (moveInputField)
+        {
+            moveInputField.text = "";
+            moveInputField.interactable = false; // will be re-enabled on StartGame
+        }
+
+        // reset draw UI
+        drawOfferReceived = false;
+        drawOfferSent = false;
+        UpdateDrawButtonText();
+
+        // reset timer
+        gameTimer = 0f;
+        if (timerText) timerText.text = "00:00";
+
+        // reset reveals
+        currentRevealCount = maxRevealCount;
+        UpdateRevealButtonText();
+
+        // hide board & clear spawned sprites
+        ClearPieces();
+        if (chessBoardObject) chessBoardObject.SetActive(false);
+
+        // state
+        moveHistory.Clear();
+        isMyTurn = false;
+        gameActive = false;
+
+        // hide the new game button while not in game-over
+        if (newGameButton) newGameButton.gameObject.SetActive(false);
+    }
+
 
     #endregion
 }

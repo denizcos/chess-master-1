@@ -1584,17 +1584,73 @@ void CancelJoinName()
     #endregion
 
     async void OnDestroy()
-    {
-        StopLobbyHeartbeat();
-        StopLobbyPolling();
-
-        if (isHost && currentUnityLobby != null)
         {
-            try
+            StopLobbyHeartbeat();
+            StopLobbyPolling();
+
+            if (isHost && currentUnityLobby != null)
+            {
+                try
+                {
+                    await LobbyService.Instance.DeleteLobbyAsync(currentUnityLobby.Id);
+                }
+                catch { }
+            }
+        }
+public async void ReturnToLobbyListImmediate()
+{
+    try
+    {
+        // stop lobby background jobs
+        StopLobbyPolling();
+        StopLobbyHeartbeat();
+
+        // shut down Netcode (host/client)
+        if (NetworkManager.Singleton != null)
+        {
+            if (NetworkManager.Singleton.IsHost || NetworkManager.Singleton.IsClient)
+                NetworkManager.Singleton.Shutdown();
+        }
+
+        // leave or delete current lobby if any (reuse your LeaveLobby logic)
+        if (currentUnityLobby != null)
+        {
+            if (isHost)
             {
                 await LobbyService.Instance.DeleteLobbyAsync(currentUnityLobby.Id);
             }
-            catch { }
+            else
+            {
+                await LobbyService.Instance.RemovePlayerAsync(currentUnityLobby.Id, currentPlayerId);
+            }
         }
+
+        // reset join-tracking so the next lobby starts fresh
+        ResetMemberSnapshot();
+
+        // null out session refs
+        currentUnityLobby = null;
+        currentLobbyId = null;
+
+        // deactivate game & room panels just in case
+        if (gamePanel) gamePanel.SetActive(false);
+        if (lobbyRoomPanel) lobbyRoomPanel.SetActive(false);
+
+        // show lobby list and start its auto-refresh
+        ShowLobbyListPanel();
+
+        // finally, if a BlindfoldMultiplayerUI exists, hard reset its visuals too
+        var ui = FindFirstObjectByType<BlindfoldMultiplayerUI>(UnityEngine.FindObjectsInactive.Include);
+        if (ui) ui.HardResetUIForNewSession();
     }
+    catch (System.Exception e)
+    {
+        Debug.LogError($"[ReturnToLobbyListImmediate] Failed: {e.Message}");
+        // fall back to best-effort
+        if (gamePanel) gamePanel.SetActive(false);
+        ShowLobbyListPanel();
+    }
+}
+
+
 }
