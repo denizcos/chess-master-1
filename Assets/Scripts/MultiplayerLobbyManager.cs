@@ -308,13 +308,21 @@ public class MultiplayerLobbyManager : MonoBehaviour
 
     public void ShowLobbyListPanel()
 {
-    lobbyListPanel.SetActive(true);
-    if (createLobbyPanel) createLobbyPanel.SetActive(false);
+    // Make panels mutually exclusive
+    if (gamePanel) gamePanel.SetActive(false);
     if (lobbyRoomPanel) lobbyRoomPanel.SetActive(false);
+    if (createLobbyPanel) createLobbyPanel.SetActive(false);
+    lobbyListPanel.SetActive(true);
 
+    // Ensure the finished-game UI is cleared if it existed
+    var ui = FindFirstObjectByType<BlindfoldMultiplayerUI>(UnityEngine.FindObjectsInactive.Include);
+    if (ui) ui.HardResetUIForNewSession();
+
+    // Start/continue auto refresh only while the list is visible
     if (autoRefreshCoroutine == null)
         autoRefreshCoroutine = StartCoroutine(AutoRefreshLobbyList());
 }
+
 
 
     IEnumerator AutoRefreshLobbyList()
@@ -355,6 +363,9 @@ public class MultiplayerLobbyManager : MonoBehaviour
 
     public void ShowGamePanel()
     {
+        if (lobbyListPanel) lobbyListPanel.SetActive(false);
+        if (createLobbyPanel) createLobbyPanel.SetActive(false);
+        if (lobbyRoomPanel) lobbyRoomPanel.SetActive(false);
         gamePanel.SetActive(true);
         if (lobbyRoomPanel) lobbyRoomPanel.SetActive(false);
 
@@ -1265,7 +1276,6 @@ void CancelJoinName()
             networkSync.StartGameForAll();
         }
 
-        ShowGamePanel();
     }
 
     #endregion

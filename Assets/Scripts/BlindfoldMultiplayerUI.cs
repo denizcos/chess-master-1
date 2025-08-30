@@ -84,8 +84,14 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     // NEW: Reveal state tracking
     private bool isRevealInProgress = false;
 
+
+    private bool hasStarted = false;
+
+
     public void InitializeGame(ChessRules rules, PlayerData local, PlayerData remote, MultiplayerLobbyManager lobby)
     {
+        hasStarted = true;
+
         chessRules = rules;
         localPlayer = local;
         remotePlayer = remote;
@@ -1463,6 +1469,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
     // Call this before starting a fresh session / when leaving the finished game
         public void HardResetUIForNewSession()
     {
+        hasStarted = false;
         // stop any reveals
         isRevealInProgress = false;
 
