@@ -5,6 +5,11 @@ using System.Collections;
 
 public class EmptyBoardMode : MonoBehaviour
 {
+    [Header("Perspective Button")]
+    public Button perspectiveButton;         // Assign the button in Inspector
+    public Sprite whitePerspectiveSprite;    // Sprite shown when White is on bottom
+    public Sprite blackPerspectiveSprite;    // Sprite shown when Black is on bottom
+
     [Header("UI References")]
     public TextMeshProUGUI targetSquareText;
     public TextMeshProUGUI scoreText;
@@ -44,6 +49,7 @@ public class EmptyBoardMode : MonoBehaviour
 
     void Start()
     {
+        BlindfoldUI.HideAllPiecesInScene();
         SetupUI();
         SetupChessBoard();
         AutoResizeBoard();
@@ -226,7 +232,18 @@ public class EmptyBoardMode : MonoBehaviour
         isWhitePerspective = !isWhitePerspective;
         SetupChessBoard();
         GenerateNewTarget();
+
+        // Update the button sprite
+        if (perspectiveButton != null)
+        {
+            Image btnImg = perspectiveButton.GetComponent<Image>();
+            if (btnImg != null)
+            {
+                btnImg.sprite = isWhitePerspective ? whitePerspectiveSprite : blackPerspectiveSprite;
+            }
+        }
     }
+
 
     void OnRectTransformDimensionsChange()
     {

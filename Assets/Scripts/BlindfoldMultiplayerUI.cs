@@ -133,7 +133,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         UpdateRevealButtonText();
 
         // Clear move log
-        moveLogText.text = "=== Blindfold Chess Match ===\n";
+    //    moveLogText.text = "=== Blindfold Chess Match ===\n";
         moveLogText.text += $"{localPlayer.playerName} vs {remotePlayer.playerName}\n\n";
         ScrollMoveLogToBottom();
 

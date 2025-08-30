@@ -19,12 +19,18 @@ public class BlindfoldModeManager : MonoBehaviour
             blindfoldUI.SetChessAI(chessAI);
         if (chessRules != null && chessAI != null)
             chessAI.SetChessRules(chessRules);
+
+        // >>> Force White perspective visually for AI mode
+        if (blindfoldUI != null)
+            blindfoldUI.ForceWhitePerspectiveVisual();
     }
 
-    void Start()
-    {
-        Debug.Log("Blindfold mode ready!");
-    }
+void Start()
+{
+    Debug.Log("Blindfold mode ready!");
+}
+
+
 
     public void ResetGame()
     {
@@ -32,4 +38,6 @@ public class BlindfoldModeManager : MonoBehaviour
         if (chessAI      != null) chessAI.ResetAI();
         if (blindfoldUI  != null) blindfoldUI.ResetGame();
     }
+
+
 }

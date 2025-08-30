@@ -693,6 +693,9 @@ public class BlindfoldUI : MonoBehaviour
 
     void SpawnAllPieces()
     {
+
+        ForceWhitePerspectiveVisual();
+
         UnityEngine.Debug.Log("=== SPAWNING ALL PIECES AS UI IMAGES ===");
 
         ClearAllPieceObjects();
@@ -891,7 +894,7 @@ public class BlindfoldUI : MonoBehaviour
         currentRevealCount = maxRevealCount;
         isRevealInProgress = false;
         moveHistory.Clear();
-        moveLogText.text = "Type your moves (e.g., e4, Nf3)";
+        // moveLogText.text = "Type your moves (e.g., e4, Nf3)";
         moveInputField.text = "";
         moveInputField.interactable = false;
         isDifficultySet = false;
@@ -1132,6 +1135,135 @@ public class BlindfoldUI : MonoBehaviour
         Canvas.ForceUpdateCanvases();
         moveLogScrollRect.verticalNormalizedPosition = 0f; // bottom
     }
+
+    // --- Add inside BlindfoldUI ---
+    // Hide ONLY the spawned piece images; keep the board visible.
+    public void ForceHidePieces()
+    {
+        // Ensure the board stays visible
+        if (chessBoardObject != null)
+            chessBoardObject.SetActive(true);
+
+        // Nuke any spawned piece UI objects
+        ClearAllPieceObjects();
+
+        // Reset reveal state defensively
+        isRevealInProgress = false;
+
+        // (Optional) normalize reveal button state/text
+        if (revealBoardButton != null)
+        {
+            revealBoardButton.interactable = true;
+            var txt = revealBoardButton.GetComponentInChildren<TMPro.TMP_Text>();
+            if (txt != null) txt.text = $"Reveal ({currentRevealCount})";
+        }
+    }
+
+    // Convenience: clear pieces across any BlindfoldUI in the scene (even if its GameObject is inactive)
+    public static void HideAllPiecesInScene()
+    {
+        var uis = GameObject.FindObjectsOfType<BlindfoldUI>(includeInactive: true);
+        foreach (var ui in uis)
+            ui.ForceHidePieces();
+    }
+
+    // When the Blindfold/AI panel disables, just clear pieces (don’t hide the board)
+    void OnDisable()
+    {
+        ForceHidePieces();
+    }
+
+    // Keep the board visually in White perspective (no flips/rotations).
+    public void ForceWhitePerspective()
+    {
+        if (chessBoardObject == null) return;
+
+        // Reset rotation/scale on the board root
+        chessBoardObject.transform.localRotation = Quaternion.identity;
+        chessBoardObject.transform.localScale    = Vector3.one;
+
+        // If you nest the actual tiles under a panel, normalize that too (safe even if not present)
+        var chessPanel = chessBoardObject.transform.Find("ChessBoardPanel");
+        if (chessPanel != null)
+        {
+            chessPanel.localRotation = Quaternion.identity;
+            chessPanel.localScale    = Vector3.one;
+        }
+
+        // (Optional) If you have rank/file label containers, normalize them as well
+        var fileLabels = chessBoardObject.transform.Find("FileLabels");
+        if (fileLabels != null)
+        {
+            fileLabels.localRotation = Quaternion.identity;
+            fileLabels.localScale    = Vector3.one;
+        }
+        var rankLabels = chessBoardObject.transform.Find("RankLabels");
+        if (rankLabels != null)
+        {
+            rankLabels.localRotation = Quaternion.identity;
+            rankLabels.localScale    = Vector3.one;
+        }
+    }
+
+    // Force the board to render from White's perspective (top-left = row 0, col 0)
+public void ForceWhitePerspectiveVisual()
+{
+    if (chessBoardObject == null) return;
+
+    // 1) Reset any accidental rotations/scales on the board and common child containers
+    chessBoardObject.transform.localRotation = Quaternion.identity;
+    chessBoardObject.transform.localScale    = Vector3.one;
+
+    // Try typical child containers if they exist (safe if null)
+    var chessPanel  = chessBoardObject.transform.Find("ChessBoardPanel");
+    var fileLabels  = chessBoardObject.transform.Find("FileLabels");
+    var rankLabels  = chessBoardObject.transform.Find("RankLabels");
+    if (chessPanel)  { chessPanel.localRotation  = Quaternion.identity; chessPanel.localScale  = Vector3.one; }
+    if (fileLabels)  { fileLabels.localRotation  = Quaternion.identity; fileLabels.localScale  = Vector3.one; }
+    if (rankLabels)  { rankLabels.localRotation  = Quaternion.identity; rankLabels.localScale  = Vector3.one; }
+
+    // 2) If the board uses a GridLayoutGroup, enforce a White-perspective ordering.
+    // We set the sibling indices so that child 0 is (row=0,col=0), child 1 is (0,1) ... child 63 is (7,7).
+    var grid = chessBoardObject.GetComponent<GridLayoutGroup>();
+    if (grid != null)
+    {
+        // White perspective: rows 0..7 top->bottom, cols 0..7 left->right
+        grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
+        grid.startAxis   = GridLayoutGroup.Axis.Horizontal;
+
+        for (int row = 0; row < 8; row++)
+        {
+            for (int col = 0; col < 8; col++)
+            {
+                string[] names =
+                {
+                    $"Square_{row}_{col}",
+                    $"Square_{row}.{col}",
+                    $"square_{row}_{col}",
+                    $"Square{row}{col}",
+                    $"Square({row},{col})",
+                    $"Tile_{row}_{col}",
+                    $"Cell_{row}_{col}",
+                };
+
+                Transform sq = null;
+                foreach (var n in names)
+                {
+                    sq = chessBoardObject.transform.Find(n);
+                    if (sq != null) break;
+                }
+                if (sq != null)
+                {
+                    int desiredIndex = row * 8 + col;
+                    // Clamp to avoid errors if there are other children in the container
+                    desiredIndex = Mathf.Clamp(desiredIndex, 0, chessBoardObject.transform.childCount - 1);
+                    sq.SetSiblingIndex(desiredIndex);
+                }
+            }
+        }
+    }
+}
+
 
     #endregion
 }
