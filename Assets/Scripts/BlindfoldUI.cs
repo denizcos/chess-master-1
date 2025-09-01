@@ -1138,26 +1138,18 @@ public class BlindfoldUI : MonoBehaviour
 
     // --- Add inside BlindfoldUI ---
     // Hide ONLY the spawned piece images; keep the board visible.
+
     public void ForceHidePieces()
-    {
-        // Ensure the board stays visible
-        if (chessBoardObject != null)
-            chessBoardObject.SetActive(true);
+{
+    ClearAllPieceObjects();
+    isRevealInProgress = false;
 
-        // Nuke any spawned piece UI objects
-        ClearAllPieceObjects();
-
-        // Reset reveal state defensively
-        isRevealInProgress = false;
-
-        // (Optional) normalize reveal button state/text
-        if (revealBoardButton != null)
-        {
-            revealBoardButton.interactable = true;
-            var txt = revealBoardButton.GetComponentInChildren<TMPro.TMP_Text>();
-            if (txt != null) txt.text = $"Reveal ({currentRevealCount})";
-        }
+    if (revealBoardButton != null) {
+        revealBoardButton.interactable = true;
+        var txt = revealBoardButton.GetComponentInChildren<TMPro.TMP_Text>();
+        if (txt != null) txt.text = $"Reveal ({currentRevealCount})";
     }
+}
 
     // Convenience: clear pieces across any BlindfoldUI in the scene (even if its GameObject is inactive)
     public static void HideAllPiecesInScene()
@@ -1169,9 +1161,12 @@ public class BlindfoldUI : MonoBehaviour
 
     // When the Blindfold/AI panel disables, just clear pieces (don’t hide the board)
     void OnDisable()
-    {
-        ForceHidePieces();
-    }
+{
+    if (chessBoardObject != null)
+        chessBoardObject.SetActive(false);  // hide shared board when AI panel goes away
+    ClearAllPieceObjects();
+    isRevealInProgress = false;
+}
 
     // Keep the board visually in White perspective (no flips/rotations).
     public void ForceWhitePerspective()
@@ -1263,6 +1258,20 @@ public void ForceWhitePerspectiveVisual()
         }
     }
 }
+    // Turn the shared board OFF and clear any spawned piece sprites.
+    public static void HideSharedBoardAndPieces()
+    {
+        var uis = GameObject.FindObjectsOfType<BlindfoldUI>(includeInactive: true);
+        foreach (var ui in uis)
+        {
+            // clear piece sprites if you have a method for that
+            ui.ForceHidePieces();            // you already have this
+
+            if (ui.chessBoardObject != null)
+                ui.chessBoardObject.SetActive(false);
+        }
+    }
+
 
 
     #endregion

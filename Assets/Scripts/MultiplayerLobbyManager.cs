@@ -311,6 +311,10 @@ public class MultiplayerLobbyManager : MonoBehaviour
 
     public void ShowLobbyListPanel()
 {
+    var aiUI = FindObjectOfType<BlindfoldUI>(true);
+    if (aiUI && aiUI.chessBoardObject) aiUI.chessBoardObject.SetActive(false);
+
+    BlindfoldUI.HideSharedBoardAndPieces();
     matchFinished = false;
     // Make panels mutually exclusive
     if (gamePanel) gamePanel.SetActive(false);
@@ -367,6 +371,10 @@ public class MultiplayerLobbyManager : MonoBehaviour
 
     public void ShowGamePanel()
     {
+        var aiUI = FindObjectOfType<BlindfoldUI>(true);
+        if (aiUI && aiUI.chessBoardObject) aiUI.chessBoardObject.SetActive(false);
+
+        BlindfoldUI.HideSharedBoardAndPieces();
         matchFinished = false;
         if (lobbyListPanel) lobbyListPanel.SetActive(false);
         if (createLobbyPanel) createLobbyPanel.SetActive(false);

@@ -274,4 +274,23 @@ public class EmptyBoardMode : MonoBehaviour
         coordinateFlashText.color = c;
         coordinateFlashText.gameObject.SetActive(false);
     }
+    public void ResetAllSquareColors()
+{
+    if (chessSquares == null) return;
+    for (int r = 0; r < 8; r++)
+    for (int c = 0; c < 8; c++)
+    {
+        var img = chessSquares[r, c];
+        if (!img) continue;
+        bool isLight = ((r + c) % 2 == 0);
+        img.color = isLight ? lightSquareColor : darkSquareColor;
+    }
+}
+
+void OnDisable()
+{
+    StopAllCoroutines();      // cancel pending ResetSquareColor coroutines
+    ResetAllSquareColors();   // restore the board’s base colors
+}
+
 }
