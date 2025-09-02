@@ -43,6 +43,8 @@ public class BlindfoldUI : MonoBehaviour
     private ChessRules chessRules;
     private ChessAI chessAI;
     private bool isRevealInProgress = false;
+    private bool isGameActive = false;   // gate to ignore late AI callbacks
+
     // Public methods to set references
     public void SetChessRules(ChessRules rules) { chessRules = rules; }
     public void SetChessAI(ChessAI ai)
@@ -89,7 +91,7 @@ public class BlindfoldUI : MonoBehaviour
         {
             difficultyPromptObject.SetActive(true);
         }
-
+        SetupDifficultyDropdown();
         UpdateRevealButtonText();
     }
     void SetupEventListeners()
@@ -589,27 +591,37 @@ public class BlindfoldUI : MonoBehaviour
     #region UI Events
 
     void OnDifficultyChanged(int value)
+{
+    // value == 0 is "Select difficulty…"
+    if (value == 0)
     {
-        if (chessAI != null)
-        {
-            chessAI.SetDifficulty(value);
-        }
-
-        isDifficultySet = true;
-
-        if (difficultyPromptObject != null)
-        {
-            difficultyPromptObject.SetActive(false);
-        }
-
-        moveInputField.interactable = true;
-
-        string[] difficulties = { "Easy", "Medium", "Hard" };
-        string difficultyName = value < difficulties.Length ? difficulties[value] : "Easy";
-
-        ShowErrorMessage($"Difficulty set to {difficultyName}.");
-        StartCoroutine(FocusInputField());
+        isDifficultySet = false;
+        isGameActive    = false;
+        moveInputField.interactable = false;
+        ShowErrorMessage("Choose difficulty.");
+        return;
     }
+
+    // Map 1..N -> 0..N-1 for your AI
+    if (chessAI != null)
+    {
+        chessAI.SetDifficulty(value - 1);
+    }
+
+    isDifficultySet = true;
+    isGameActive    = true;
+
+    if (difficultyPromptObject != null)
+        difficultyPromptObject.SetActive(false);
+
+    moveInputField.interactable = true;
+
+    string[] difficulties = { "Easy", "Medium", "Hard" };
+    int idx = Mathf.Clamp(value - 1, 0, difficulties.Length - 1);
+    ShowErrorMessage($"Difficulty set to {difficulties[idx]}.");
+    StartCoroutine(FocusInputField());
+}
+
     void ResignGame()
     {
         if (!isDifficultySet)
@@ -913,6 +925,8 @@ public class BlindfoldUI : MonoBehaviour
         ClearAllPieceObjects();
         chessBoardObject.SetActive(false); // NEW: Hide board again for new game
         UpdateRevealButtonText();
+
+        SetupDifficultyDropdown();
 
         if (revealBoardButton != null)
             revealBoardButton.interactable = true;
@@ -1271,6 +1285,28 @@ public void ForceWhitePerspectiveVisual()
                 ui.chessBoardObject.SetActive(false);
         }
     }
+
+    void SetupDifficultyDropdown()
+{
+    if (difficultyDropdown == null) return;
+
+    // Ensure there is a placeholder option at index 0
+    if (difficultyDropdown.options.Count == 0 || difficultyDropdown.options[0].text != "Select difficulty…")
+    {
+        difficultyDropdown.options.Insert(0, new TMP_Dropdown.OptionData("Select difficulty…"));
+    }
+
+    // Reset to placeholder without firing value-changed
+    difficultyDropdown.SetValueWithoutNotify(0);
+    difficultyDropdown.RefreshShownValue();
+
+    isDifficultySet = false;
+    isGameActive    = false;
+    moveInputField.interactable = false;
+    if (difficultyPromptObject) difficultyPromptObject.SetActive(true);
+    ShowErrorMessage("Choose difficulty.");
+}
+
 
 
 

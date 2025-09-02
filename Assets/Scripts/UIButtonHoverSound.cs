@@ -10,6 +10,7 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
 
     [Header("UI Sounds")]
     public AudioClip hoverClip;
+    public AudioClip hoverClip1;
     public AudioClip clickClip;
     public AudioClip switchClip;
     public AudioClip notificationClip;
@@ -54,7 +55,8 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
     void OnApplicationFocus(bool hasFocus) { AudioListener.pause = !hasFocus; }
     void OnApplicationPause(bool paused) { if (paused) AudioListener.pause = true; }
 
-    public void OnPointerEnter(PointerEventData eventData) => PlayHover();
+    // public void OnPointerEnter(PointerEventData eventData) => PlayHover();
+    public void OnPointerEnter(PointerEventData eventData) => PlayHover1();
     public void OnPointerClick(PointerEventData eventData) => PlayClick();
 
     public void PlayNotification()
@@ -73,6 +75,11 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
     {
         if (audioSource != null && hoverClip != null)
             audioSource.PlayOneShot(hoverClip);
+    }
+    public void PlayHover1()
+    {
+        if (audioSource != null && hoverClip1 != null)
+            audioSource.PlayOneShot(hoverClip1);
     }
 
     public void PlayClick()
