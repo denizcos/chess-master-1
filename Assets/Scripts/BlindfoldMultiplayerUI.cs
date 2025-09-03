@@ -439,6 +439,7 @@ public class BlindfoldMultiplayerUI : MonoBehaviour
         }
         else
         {
+            UIButtonHoverSound.Instance.PlayInvalidMove();
             ShowError($"Invalid move: {moveNotation}");
             moveInputField.text = "";
             FocusInput();

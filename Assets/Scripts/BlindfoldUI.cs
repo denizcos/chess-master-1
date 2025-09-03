@@ -44,6 +44,8 @@ public class BlindfoldUI : MonoBehaviour
     private ChessAI chessAI;
     private bool isRevealInProgress = false;
     private bool isGameActive = false;   // gate to ignore late AI callbacks
+    private bool acceptAIMoves = false; // only true while we're waiting for Black's move
+
 
     // Public methods to set references
     public void SetChessRules(ChessRules rules) { chessRules = rules; }
@@ -280,6 +282,7 @@ public class BlindfoldUI : MonoBehaviour
     }
     else
     {
+        UIButtonHoverSound.Instance.PlayInvalidMove();
         ShowErrorMessage($"Invalid move notation: {playerMove}");
     }
 
@@ -341,6 +344,7 @@ public class BlindfoldUI : MonoBehaviour
         // Get AI move if it's AI's turn (assuming AI plays as Black)
         if (!chessRules.IsWhiteTurn && chessAI.IsReady())
         {
+            acceptAIMoves = true;
             chessAI.GetAIMove();
         }
     }
@@ -507,37 +511,43 @@ public class BlindfoldUI : MonoBehaviour
     #region AI Handling
 
     void OnAIMoveReceived(string aiMove)
-{
-    // aiMove is like "d7e6" or "e2e4"
-    if (aiMove.Length < 4) return;
+    {
+        // Ignore late/out-of-turn AI moves
+        if (!isDifficultySet || chessRules == null || chessRules.IsWhiteTurn || !acceptAIMoves)
+            return;
 
-    // 1) Parse coordinates
-    int fromCol = aiMove[0] - 'a';
-    int fromRow = 8 - (aiMove[1] - '0');
-    int toCol   = aiMove[2] - 'a';
-    int toRow   = 8 - (aiMove[3] - '0');
+        if (string.IsNullOrEmpty(aiMove) || aiMove.Length < 4)
+            return;
 
-    // 2) Capture state before moving
-    var piece     = chessRules.GetPiece(fromRow, fromCol);
-    bool wasCapture = chessRules.GetPiece(toRow, toCol) != null;
+        // 1) Parse coordinates
+        int fromCol = aiMove[0] - 'a';
+        int fromRow = 8 - (aiMove[1] - '0');
+        int toCol   = aiMove[2] - 'a';
+        int toRow   = 8 - (aiMove[3] - '0');
 
-    // 3) Execute the move exactly once
-    chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
-    UIButtonHoverSound.Instance.PlayRandomMove();
+        // 2) Capture state before moving
+        var piece = chessRules.GetPiece(fromRow, fromCol);
+        bool wasCapture = chessRules.GetPiece(toRow, toCol) != null;
 
-    // 4) Generate standardized notation
-    string moveNotation = GenerateAlgebraicNotation(
-        piece.type,
-        fromRow, fromCol,
-        toRow,   toCol,
-        wasCapture
-    );
+        // 3) Execute the move exactly once
+        chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
+        UIButtonHoverSound.Instance.PlayRandomMove();
 
-    // 5) Log it, advance turn
-    AddMoveToLog(moveNotation);
-    chessRules.NextTurn();
-    CheckGameStateAndContinue();
-}
+        // 4) Generate standardized notation
+        string moveNotation = GenerateAlgebraicNotation(
+            piece.type, fromRow, fromCol, toRow, toCol, wasCapture
+        );
+
+        // 5) Log it, advance turn
+        AddMoveToLog(moveNotation);
+        chessRules.NextTurn();
+
+        // Close the gate: we consumed the one expected AI move
+        acceptAIMoves = false;
+
+        CheckGameStateAndContinue();
+    }
+
 
 
     string ConvertToAlgebraic(int fromRow, int fromCol, int toRow, int toCol)
@@ -624,6 +634,7 @@ public class BlindfoldUI : MonoBehaviour
 
     void ResignGame()
     {
+        acceptAIMoves = false;
         if (!isDifficultySet)
         {
             ShowErrorMessage("No active game to resign from.");
@@ -902,6 +913,8 @@ public class BlindfoldUI : MonoBehaviour
 
     public void ResetGame()
     {
+        acceptAIMoves = false;
+
         // Reset UI state
         currentRevealCount = maxRevealCount;
         isRevealInProgress = false;

@@ -30116,6 +30116,10 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 8300000, guid: 627f50ddbbd34d84f9c8fb48bcbbb447, type: 3}
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
+      propertyPath: invalidClip
+      value: 
+      objectReference: {fileID: 8300000, guid: 01ab872050cc0a743afeb0e9b4934983, type: 3}
+    - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: revealEndClip
       value: 
       objectReference: {fileID: 8300000, guid: e27385400d839564682158ee1a9c39d7, type: 3}

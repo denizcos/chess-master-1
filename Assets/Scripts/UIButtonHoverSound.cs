@@ -23,6 +23,7 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
     public AudioClip checkmateClip;
     public AudioClip stalemateClip;
     public AudioClip castleClip;
+    public AudioClip invalidClip;
 
     [Header("Answer Sounds")]
     public AudioClip correctClip;
@@ -30,6 +31,7 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
 
     [Header("Move Sounds")]
     public AudioClip[] moveClips;
+    
 
     // Dedicated source for notifications that can play while background-muted
     private AudioSource notificationSource;
@@ -70,6 +72,12 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
         if (audioSource != null && castleClip != null)
             audioSource.PlayOneShot(castleClip);
     }
+     public void PlayInvalidMove()
+    {
+        if (audioSource != null && invalidClip != null)
+            audioSource.PlayOneShot(invalidClip);
+    }
+
 
     public void PlayHover()
     {
