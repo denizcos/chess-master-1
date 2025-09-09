@@ -15,6 +15,7 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
     public AudioClip switchClip;
     public AudioClip notificationClip;
 
+
     [Header("Game Sounds")]
     public AudioClip revealClip;
     public AudioClip revealEndClip;
@@ -25,15 +26,22 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
     public AudioClip castleClip;
     public AudioClip invalidClip;
 
-    [Header("Answer Sounds")]
+ //   [Header("Answer Sounds")]
     public AudioClip correctClip;
     public AudioClip wrongClip;
 
     [Header("Move Sounds")]
     public AudioClip[] moveClips;
-    
 
-    // Dedicated source for notifications that can play while background-muted
+    [Header("Keyboard Clacks")]
+    public AudioClip[] clackClips;
+    [Range(0f, 1f)] public float clackVolume = 0.7f;  // slider in Inspector
+
+    [Header("Keyboard Special Keys")]
+    public AudioClip deleteClip;
+    public AudioClip enterClip;
+
+
     private AudioSource notificationSource;
 
     void Awake()
@@ -42,10 +50,8 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
-        // Let audio/network tick while alt-tabbed
         Application.runInBackground = true;
 
-        // Dedicated source that plays even if AudioListener is paused
         notificationSource = gameObject.AddComponent<AudioSource>();
         notificationSource.playOnAwake = false;
         notificationSource.ignoreListenerPause = true;
@@ -53,13 +59,17 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
             notificationSource.outputAudioMixerGroup = audioSource.outputAudioMixerGroup;
     }
 
-    // Pause all other sounds when unfocused; notificationSource ignores this
     void OnApplicationFocus(bool hasFocus) { AudioListener.pause = !hasFocus; }
     void OnApplicationPause(bool paused) { if (paused) AudioListener.pause = true; }
 
-    // public void OnPointerEnter(PointerEventData eventData) => PlayHover();
     public void OnPointerEnter(PointerEventData eventData) => PlayHover1();
     public void OnPointerClick(PointerEventData eventData) => PlayClick();
+    
+    public void PlayEnter()
+{
+    if (audioSource != null && enterClip != null)
+        audioSource.PlayOneShot(enterClip, clackVolume);
+}
 
     public void PlayNotification()
     {
@@ -67,23 +77,30 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
             notificationSource.PlayOneShot(notificationClip);
     }
 
+    public void PlayDelete()
+{
+    if (audioSource != null && deleteClip != null)
+        audioSource.PlayOneShot(deleteClip, clackVolume);
+}
+
     public void PlayCastle()
     {
         if (audioSource != null && castleClip != null)
             audioSource.PlayOneShot(castleClip);
     }
-     public void PlayInvalidMove()
+
+    public void PlayInvalidMove()
     {
         if (audioSource != null && invalidClip != null)
             audioSource.PlayOneShot(invalidClip);
     }
-
 
     public void PlayHover()
     {
         if (audioSource != null && hoverClip != null)
             audioSource.PlayOneShot(hoverClip);
     }
+
     public void PlayHover1()
     {
         if (audioSource != null && hoverClip1 != null)
@@ -132,9 +149,23 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
             audioSource.PlayOneShot(stalemateClip);
     }
 
-    public void PlayCorrect()  { if (audioSource != null && correctClip != null) audioSource.PlayOneShot(correctClip); }
-    public void PlayWrong()    { if (audioSource != null && wrongClip   != null) audioSource.PlayOneShot(wrongClip); }
-    public void PlaySwitch()   { if (audioSource != null && switchClip  != null) audioSource.PlayOneShot(switchClip); }
+    public void PlayCorrect()
+    {
+        if (audioSource != null && correctClip != null)
+            audioSource.PlayOneShot(correctClip);
+    }
+
+    public void PlayWrong()
+    {
+        if (audioSource != null && wrongClip != null)
+            audioSource.PlayOneShot(wrongClip);
+    }
+
+    public void PlaySwitch()
+    {
+        if (audioSource != null && switchClip != null)
+            audioSource.PlayOneShot(switchClip);
+    }
 
     public void PlayRandomMove()
     {
@@ -144,7 +175,18 @@ public class UIButtonHoverSound : MonoBehaviour, IPointerEnterHandler, IPointerC
         if (clip != null) audioSource.PlayOneShot(clip);
     }
 
+    // ---- NEW: Random keyboard clack ----
+    public void PlayRandomClack()
+{
+    if (audioSource == null || clackClips == null || clackClips.Length == 0) return;
+    int idx = Random.Range(0, clackClips.Length);
+    var clip = clackClips[idx];
+    if (clip != null) audioSource.PlayOneShot(clip, clackVolume);
+}
+
     // Aliases
-    public void PlayCorrectSound() => PlayCorrect();
-    public void PlayWrongSound()   => PlayWrong();
+public void PlayCorrectSound() => PlayCorrect();
+public void PlayWrongSound()   => PlayWrong();
+
+
 }
