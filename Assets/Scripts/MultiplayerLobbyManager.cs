@@ -1467,49 +1467,62 @@ void CancelJoinName()
 }
 
 
-    public void SwapPlayerColors()
+    
+
+public async void SwapPlayerColors()
+{
+    Debug.Log("[COLOR SWAP] SwapPlayerColors called");
+
+    if (localPlayer == null || remotePlayer == null || currentUnityLobby == null)
     {
-        Debug.Log("[COLOR SWAP] SwapPlayerColors called");
-
-        if (localPlayer != null)
-        {
-            Debug.Log($"[COLOR SWAP] Before: Local player {localPlayer.playerName} is {localPlayer.color}");
-            var newLocalColor = localPlayer.color == ChessRules.PieceColor.White ?
-                ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
-
-            localPlayer = new PlayerData
-            {
-                playerId = localPlayer.playerId,
-                playerName = localPlayer.playerName,
-                isHost = localPlayer.isHost,
-                isReady = localPlayer.isReady,
-                color = newLocalColor
-            };
-            Debug.Log($"[COLOR SWAP] After: Local player {localPlayer.playerName} is now {localPlayer.color}");
-        }
-
-        if (remotePlayer != null)
-        {
-            Debug.Log($"[COLOR SWAP] Before: Remote player {remotePlayer.playerName} is {remotePlayer.color}");
-            var newRemoteColor = remotePlayer.color == ChessRules.PieceColor.White ?
-                ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
-
-            remotePlayer = new PlayerData
-            {
-                playerId = remotePlayer.playerId,
-                playerName = remotePlayer.playerName,
-                isHost = remotePlayer.isHost,
-                isReady = remotePlayer.isReady,
-                color = newRemoteColor
-            };
-            Debug.Log($"[COLOR SWAP] After: Remote player {remotePlayer.playerName} is now {remotePlayer.color}");
-        }
-
-        // FIXED: Force immediate UI update to show the color swap
-        Debug.Log("[COLOR SWAP] Forcing immediate UI update");
-        UpdateDisplayedPlayerSlots();
-        lastUIUpdateTime = Time.time + 3f;
+        Debug.LogWarning("[COLOR SWAP] Missing players or lobby");
+        return;
     }
+
+    // 1) Swap in-memory colors for both entries (mutate; don't replace objects)
+    var oldLocal  = localPlayer.color;
+    var oldRemote = remotePlayer.color;
+
+    localPlayer.color  = (oldLocal  == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
+    remotePlayer.color = (oldRemote == ChessRules.PieceColor.White) ? ChessRules.PieceColor.Black : ChessRules.PieceColor.White;
+
+    Debug.Log($"[COLOR SWAP] Local now {localPlayer.color}, Remote now {remotePlayer.color}");
+
+    // 2) Persist ONLY *my own* player row in Unity Lobby.
+    //    (This method runs on both clients due to the RPC, so each updates themselves.)
+    try
+    {
+        string myNewColor = (localPlayer.color == ChessRules.PieceColor.White) ? "White" : "Black";
+
+        await LobbyService.Instance.UpdatePlayerAsync(
+            currentUnityLobby.Id,
+            currentPlayerId, // <-- update self only
+            new UpdatePlayerOptions
+            {
+                Data = new Dictionary<string, PlayerDataObject>
+                {
+                    { "Color", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, myNewColor) }
+                }
+            });
+
+        Debug.Log($"[COLOR SWAP] Saved my color ({myNewColor}) to Lobby");
+    }
+    catch (System.Exception e)
+    {
+        Debug.LogError($"[COLOR SWAP] Failed to update my Lobby color: {e.Message}");
+        // (Optional) revert localPlayer.color here if you want strict consistency
+    }
+
+    // 3) Give the other side a moment to write their own row, then refresh UI
+    StartCoroutine(DelayedLobbyUIRefresh());
+}
+
+private System.Collections.IEnumerator DelayedLobbyUIRefresh()
+{
+    yield return new WaitForSeconds(0.5f);
+    UpdateLobbyRoomUI();
+}
+
 
     void UpdateDisplayedPlayerSlots()
     {
