@@ -17558,7 +17558,6 @@ MonoBehaviour:
     texture: {fileID: 2800000, guid: f334b888c4ec1b0489f832b0296a09bd, type: 3}
     hotSpot: {x: 0, y: 0}
   defaultCursorName: Default
-  forceSoftwareIfNeeded: 1
 --- !u!4 &1110483562
 Transform:
   m_ObjectHideFlags: 0
@@ -30488,7 +30487,7 @@ PrefabInstance:
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: enterClip
       value: 
-      objectReference: {fileID: 8300000, guid: dae1eb0826e384f41bde2f81ef356100, type: 3}
+      objectReference: {fileID: 8300000, guid: 33e50cb9d0c90b94984e16a41220ed85, type: 3}
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: hoverClip
       value: 
@@ -30500,7 +30499,7 @@ PrefabInstance:
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: deleteClip
       value: 
-      objectReference: {fileID: 8300000, guid: bdb4dbd792c1aa64898c9be4bc83cd73, type: 3}
+      objectReference: {fileID: 8300000, guid: 33e50cb9d0c90b94984e16a41220ed85, type: 3}
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: hoverClip1
       value: 
@@ -30544,59 +30543,59 @@ PrefabInstance:
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: 'clackClips.Array.data[1]'
       value: 
-      objectReference: {fileID: 8300000, guid: 707345dc5b03d494fbd70f40442cc193, type: 3}
+      objectReference: {fileID: 8300000, guid: 33e50cb9d0c90b94984e16a41220ed85, type: 3}
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: 'clackClips.Array.data[2]'
       value: 
-      objectReference: {fileID: 8300000, guid: 6cbb05c74bc9b2540904dbfe22482c19, type: 3}
+      objectReference: {fileID: 8300000, guid: 33e50cb9d0c90b94984e16a41220ed85, type: 3}
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: 'clackClips.Array.data[3]'
       value: 
-      objectReference: {fileID: 8300000, guid: a6ecf98bf2b53bf499063ab752453ef8, type: 3}
+      objectReference: {fileID: 8300000, guid: 33e50cb9d0c90b94984e16a41220ed85, type: 3}
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: 'clackClips.Array.data[4]'
       value: 
-      objectReference: {fileID: 8300000, guid: 7802372eb62c73249a74584d734c4f67, type: 3}
+      objectReference: {fileID: 8300000, guid: 33e50cb9d0c90b94984e16a41220ed85, type: 3}
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: 'clackClips.Array.data[5]'
       value: 
-      objectReference: {fileID: 8300000, guid: 2180efe7c11450441bc2049a2ebb64cd, type: 3}
+      objectReference: {fileID: 8300000, guid: 33e50cb9d0c90b94984e16a41220ed85, type: 3}
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: 'clackClips.Array.data[6]'
       value: 
-      objectReference: {fileID: 8300000, guid: f2f05ece1e3ea674e9c0fa9466527d01, type: 3}
+      objectReference: {fileID: 8300000, guid: 33e50cb9d0c90b94984e16a41220ed85, type: 3}
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: 'clackClips.Array.data[7]'
       value: 
-      objectReference: {fileID: 8300000, guid: 8793a2d663ed07a479c40ab6ae40972d, type: 3}
+      objectReference: {fileID: 8300000, guid: 33e50cb9d0c90b94984e16a41220ed85, type: 3}
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: 'clackClips.Array.data[8]'
       value: 
-      objectReference: {fileID: 8300000, guid: 2517fc4dde7423c48b1992ce758c10e7, type: 3}
+      objectReference: {fileID: 8300000, guid: 33e50cb9d0c90b94984e16a41220ed85, type: 3}
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: 'clackClips.Array.data[9]'
       value: 
-      objectReference: {fileID: 8300000, guid: b5c8d378b83fec94491b10fea6c1ab9d, type: 3}
+      objectReference: {fileID: 8300000, guid: 33e50cb9d0c90b94984e16a41220ed85, type: 3}
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: 'clackClips.Array.data[10]'
       value: 
-      objectReference: {fileID: 8300000, guid: 3c83b0d173c18364780d01acfba6d5ec, type: 3}
+      objectReference: {fileID: 8300000, guid: 33e50cb9d0c90b94984e16a41220ed85, type: 3}
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: 'clackClips.Array.data[11]'
       value: 
-      objectReference: {fileID: 8300000, guid: e8f578b1a22137b4ea8a3bb68c762163, type: 3}
+      objectReference: {fileID: 8300000, guid: 33e50cb9d0c90b94984e16a41220ed85, type: 3}
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: 'clackClips.Array.data[12]'
       value: 
-      objectReference: {fileID: 8300000, guid: 0a0681beede5ae242a002f61486882e2, type: 3}
+      objectReference: {fileID: 8300000, guid: 33e50cb9d0c90b94984e16a41220ed85, type: 3}
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: 'clackClips.Array.data[13]'
       value: 
-      objectReference: {fileID: 8300000, guid: 669a380d6365eb04398b6b5d2d16a5aa, type: 3}
+      objectReference: {fileID: 8300000, guid: 33e50cb9d0c90b94984e16a41220ed85, type: 3}
     - target: {fileID: 7429539945253524146, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: 'clackClips.Array.data[14]'
       value: 
-      objectReference: {fileID: 8300000, guid: 1e4fca455d8400c45babd498e20e6f2f, type: 3}
+      objectReference: {fileID: 8300000, guid: 33e50cb9d0c90b94984e16a41220ed85, type: 3}
     - target: {fileID: 8549951901980836912, guid: 4d5ae81f35215d349a861a3e865dc760, type: 3}
       propertyPath: m_Name
       value: UIAudio
