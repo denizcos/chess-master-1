@@ -85,23 +85,26 @@ public class ChessAI : MonoBehaviour
     }
 
     string GetStockfishPath()
-    {
-        string fileName;
+{
+    string fileName;
 
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
-        fileName = "stockfish.exe";
+    fileName = "stockfish.exe";
 #elif UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
-        fileName = "stockfish-mac";
+    // Detect whether CPU is Apple Silicon (M1/M2/M3) or Intel
+    bool isAppleSilicon = SystemInfo.processorType.ToLower().Contains("apple");
+    fileName = isAppleSilicon ? "stockfish-mac-arm64" : "stockfish-mac-x64";
 #elif UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
-        fileName = "stockfish-linux";
+    fileName = "stockfish-linux";
 #elif UNITY_ANDROID
-        fileName = "stockfish-android";
+    fileName = "stockfish-android";
 #else
-        fileName = "stockfish.exe";
+    fileName = "stockfish.exe";
 #endif
 
-        return Path.Combine(Application.streamingAssetsPath, fileName);
-    }
+    return Path.Combine(Application.streamingAssetsPath, fileName);
+}
+
 
     IEnumerator InitializeUCI()
     {

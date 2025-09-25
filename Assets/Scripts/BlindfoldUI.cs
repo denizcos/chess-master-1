@@ -602,7 +602,7 @@ public class BlindfoldUI : MonoBehaviour
 
     void OnDifficultyChanged(int value)
 {
-    // value == 0 is "Select difficulty…"
+    // value == 0 is "Select difficulty"
     if (value == 0)
     {
         isDifficultySet = false;
@@ -898,13 +898,13 @@ public class BlindfoldUI : MonoBehaviour
 
         if (chessRules.IsWhiteTurn)
         {
-            // White’s move starts the line
+            // Whiteï¿½s move starts the line
             moveLogText.text += $"{chessRules.MoveNumber}. {moveNotation} ";
             ScrollMoveLogToBottom();
         }
         else
         {
-            // Black’s move finishes the line and adds newline
+            // Blackï¿½s move finishes the line and adds newline
             moveLogText.text += $"{moveNotation}\n";
             ScrollMoveLogToBottom();
         }
@@ -1186,7 +1186,7 @@ public class BlindfoldUI : MonoBehaviour
             ui.ForceHidePieces();
     }
 
-    // When the Blindfold/AI panel disables, just clear pieces (don’t hide the board)
+    // When the Blindfold/AI panel disables, just clear pieces (donï¿½t hide the board)
     void OnDisable()
 {
     if (chessBoardObject != null)
@@ -1304,9 +1304,9 @@ public void ForceWhitePerspectiveVisual()
     if (difficultyDropdown == null) return;
 
     // Ensure there is a placeholder option at index 0
-    if (difficultyDropdown.options.Count == 0 || difficultyDropdown.options[0].text != "Select difficulty…")
+    if (difficultyDropdown.options.Count == 0 || difficultyDropdown.options[0].text != "Select difficulty")
     {
-        difficultyDropdown.options.Insert(0, new TMP_Dropdown.OptionData("Select difficulty…"));
+        difficultyDropdown.options.Insert(0, new TMP_Dropdown.OptionData("Select difficulty"));
     }
 
     // Reset to placeholder without firing value-changed
