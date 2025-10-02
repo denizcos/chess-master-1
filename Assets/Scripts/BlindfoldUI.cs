@@ -511,42 +511,98 @@ public class BlindfoldUI : MonoBehaviour
     #region AI Handling
 
     void OnAIMoveReceived(string aiMove)
+{
+    // Ignore late/out-of-turn AI moves
+    if (!isDifficultySet || chessRules == null || chessRules.IsWhiteTurn || !acceptAIMoves)
+        return;
+
+    if (string.IsNullOrEmpty(aiMove) || aiMove.Length < 4)
+        return;
+
+    // 1) Parse coordinates (UCI like "e8g8")
+    int fromCol = aiMove[0] - 'a';
+    int fromRow = 8 - (aiMove[1] - '0');
+    int toCol   = aiMove[2] - 'a';
+    int toRow   = 8 - (aiMove[3] - '0');
+
+    // 2) Identify the moving piece
+    var piece = chessRules.GetPiece(fromRow, fromCol);
+    if (piece == null) return;
+
+    // --- CASTLING DETECTION (UCI) ---
+    // White king: e1 -> g1 (O-O), e1 -> c1 (O-O-O)
+    // Black king: e8 -> g8 (O-O), e8 -> c8 (O-O-O)
+    if (piece.type == ChessRules.PieceType.King)
     {
-        // Ignore late/out-of-turn AI moves
-        if (!isDifficultySet || chessRules == null || chessRules.IsWhiteTurn || !acceptAIMoves)
-            return;
+        // White
+        if (fromRow == 7 && fromCol == 4)
+        {
+            if (toRow == 7 && toCol == 6) // e1 -> g1
+            {
+                chessRules.ExecuteCastling(ChessRules.PieceColor.White, true);
+                UIButtonHoverSound.Instance.PlayRandomMove();
+                AddMoveToLog("O-O");
+                chessRules.NextTurn();
+                acceptAIMoves = false;
+                CheckGameStateAndContinue();
+                return;
+            }
+            else if (toRow == 7 && toCol == 2) // e1 -> c1
+            {
+                chessRules.ExecuteCastling(ChessRules.PieceColor.White, false);
+                UIButtonHoverSound.Instance.PlayRandomMove();
+                AddMoveToLog("O-O-O");
+                chessRules.NextTurn();
+                acceptAIMoves = false;
+                CheckGameStateAndContinue();
+                return;
+            }
+        }
 
-        if (string.IsNullOrEmpty(aiMove) || aiMove.Length < 4)
-            return;
-
-        // 1) Parse coordinates
-        int fromCol = aiMove[0] - 'a';
-        int fromRow = 8 - (aiMove[1] - '0');
-        int toCol   = aiMove[2] - 'a';
-        int toRow   = 8 - (aiMove[3] - '0');
-
-        // 2) Capture state before moving
-        var piece = chessRules.GetPiece(fromRow, fromCol);
-        bool wasCapture = chessRules.GetPiece(toRow, toCol) != null;
-
-        // 3) Execute the move exactly once
-        chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
-        UIButtonHoverSound.Instance.PlayRandomMove();
-
-        // 4) Generate standardized notation
-        string moveNotation = GenerateAlgebraicNotation(
-            piece.type, fromRow, fromCol, toRow, toCol, wasCapture
-        );
-
-        // 5) Log it, advance turn
-        AddMoveToLog(moveNotation);
-        chessRules.NextTurn();
-
-        // Close the gate: we consumed the one expected AI move
-        acceptAIMoves = false;
-
-        CheckGameStateAndContinue();
+        // Black
+        if (fromRow == 0 && fromCol == 4)
+        {
+            if (toRow == 0 && toCol == 6) // e8 -> g8
+            {
+                chessRules.ExecuteCastling(ChessRules.PieceColor.Black, true);
+                UIButtonHoverSound.Instance.PlayRandomMove();
+                AddMoveToLog("O-O");
+                chessRules.NextTurn();
+                acceptAIMoves = false;
+                CheckGameStateAndContinue();
+                return;
+            }
+            else if (toRow == 0 && toCol == 2) // e8 -> c8
+            {
+                chessRules.ExecuteCastling(ChessRules.PieceColor.Black, false);
+                UIButtonHoverSound.Instance.PlayRandomMove();
+                AddMoveToLog("O-O-O");
+                chessRules.NextTurn();
+                acceptAIMoves = false;
+                CheckGameStateAndContinue();
+                return;
+            }
+        }
     }
+
+    // --- NORMAL MOVE PATH ---
+    bool wasCapture = chessRules.GetPiece(toRow, toCol) != null;
+
+    chessRules.ExecuteMove(fromRow, fromCol, toRow, toCol);
+    UIButtonHoverSound.Instance.PlayRandomMove();
+
+    string moveNotation = GenerateAlgebraicNotation(
+        piece.type, fromRow, fromCol, toRow, toCol, wasCapture
+    );
+
+    AddMoveToLog(moveNotation);
+    chessRules.NextTurn();
+
+    // Close the gate: we consumed the one expected AI move
+    acceptAIMoves = false;
+
+    CheckGameStateAndContinue();
+}
 
 
 
@@ -602,7 +658,7 @@ public class BlindfoldUI : MonoBehaviour
 
     void OnDifficultyChanged(int value)
 {
-    // value == 0 is "Select difficulty…"
+    // value == 0 is "Select difficulty "
     if (value == 0)
     {
         isDifficultySet = false;
@@ -898,13 +954,13 @@ public class BlindfoldUI : MonoBehaviour
 
         if (chessRules.IsWhiteTurn)
         {
-            // White’s move starts the line
+            // White s move starts the line
             moveLogText.text += $"{chessRules.MoveNumber}. {moveNotation} ";
             ScrollMoveLogToBottom();
         }
         else
         {
-            // Black’s move finishes the line and adds newline
+            // Black s move finishes the line and adds newline
             moveLogText.text += $"{moveNotation}\n";
             ScrollMoveLogToBottom();
         }
@@ -1117,40 +1173,69 @@ public class BlindfoldUI : MonoBehaviour
         UnityEngine.Debug.Log($"Black King: {(blackKingSprite != null ? blackKingSprite.name : "NULL")}");
     }
     private string GenerateAlgebraicNotation(
-        ChessRules.PieceType type,
-        int fromRow, int fromCol,
-        int toRow,   int toCol,
-        bool wasCapture)
-    {
-        // File/rank of origin and destination
-        char fromFile = (char)('a' + fromCol);
-        char toFile   = (char)('a' + toCol);
-        int  toRank   = 8 - toRow;
+    ChessRules.PieceType type,
+    int fromRow, int fromCol,
+    int toRow,   int toCol,
+    bool wasCapture)
+{
+    char fromFile = (char)('a' + fromCol);
+    char toFile   = (char)('a' + toCol);
+    int  toRank   = 8 - toRow;
 
-        // Handle pawns specially
-        if (type == ChessRules.PieceType.Pawn)
+    // Handle pawns
+    if (type == ChessRules.PieceType.Pawn)
+    {
+        if (wasCapture)
+            return $"{fromFile}x{toFile}{toRank}";
+        else
+            return $"{toFile}{toRank}";
+    }
+
+    // Map piece types
+    string symbol = type switch {
+        ChessRules.PieceType.Knight => "N",
+        ChessRules.PieceType.Bishop => "B",
+        ChessRules.PieceType.Rook   => "R",
+        ChessRules.PieceType.Queen  => "Q",
+        ChessRules.PieceType.King   => "K",
+        _ => ""
+    };
+
+    // --- disambiguation logic ---
+    string disambiguation = "";
+    var movingPiece = chessRules.GetPiece(fromRow, fromCol);
+    if (movingPiece != null)
+    {
+        var candidates = new List<(int row, int col)>();
+        for (int r = 0; r < 8; r++)
         {
-            if (wasCapture)
-                return $"{fromFile}x{toFile}{toRank}";
-            else
-                return $"{toFile}{toRank}";
+            for (int c = 0; c < 8; c++)
+            {
+                if (r == fromRow && c == fromCol) continue;
+                var other = chessRules.GetPiece(r, c);
+                if (other != null && other.color == movingPiece.color && other.type == type)
+                {
+                    if (chessRules.CanPieceMoveTo(r, c, toRow, toCol, other))
+                        candidates.Add((r, c));
+                }
+            }
         }
 
-        // Map piece types to symbols
-        string symbol = type switch {
-            ChessRules.PieceType.Knight => "N",
-            ChessRules.PieceType.Bishop => "B",
-            ChessRules.PieceType.Rook   => "R",
-            ChessRules.PieceType.Queen  => "Q",
-            ChessRules.PieceType.King   => "K",
-            _ => ""
-        };
+        if (candidates.Count > 0)
+        {
+            bool sameFile = candidates.Exists(c => c.col == fromCol);
+            bool sameRank = candidates.Exists(c => c.row == fromRow);
 
-        // Quiet move vs capture
-        string captureMark = wasCapture ? "x" : "";
-
-        return $"{symbol}{captureMark}{toFile}{toRank}";
+            if (!sameFile) disambiguation = fromFile.ToString();
+            else if (!sameRank) disambiguation = (8 - fromRow).ToString();
+            else disambiguation = $"{fromFile}{8 - fromRow}";
+        }
     }
+
+    string captureMark = wasCapture ? "x" : "";
+    return $"{symbol}{disambiguation}{captureMark}{toFile}{toRank}";
+}
+
     void ScrollMoveLogToBottom()
     {
         if (moveLogScrollRect == null) return;
@@ -1186,7 +1271,7 @@ public class BlindfoldUI : MonoBehaviour
             ui.ForceHidePieces();
     }
 
-    // When the Blindfold/AI panel disables, just clear pieces (don’t hide the board)
+    // When the Blindfold/AI panel disables, just clear pieces (don t hide the board)
     void OnDisable()
 {
     if (chessBoardObject != null)
@@ -1304,9 +1389,9 @@ public void ForceWhitePerspectiveVisual()
     if (difficultyDropdown == null) return;
 
     // Ensure there is a placeholder option at index 0
-    if (difficultyDropdown.options.Count == 0 || difficultyDropdown.options[0].text != "Select difficulty…")
+    if (difficultyDropdown.options.Count == 0 || difficultyDropdown.options[0].text != "Select difficulty ")
     {
-        difficultyDropdown.options.Insert(0, new TMP_Dropdown.OptionData("Select difficulty…"));
+        difficultyDropdown.options.Insert(0, new TMP_Dropdown.OptionData("Select difficulty "));
     }
 
     // Reset to placeholder without firing value-changed
