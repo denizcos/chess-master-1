@@ -31,6 +31,9 @@ public class InputBasedMainMenuController : MonoBehaviour
     public GameObject coordinate_EmptyBoardModeObject;
     public ModeConfig coordinateMode;
 
+    [Header("Coordinate Training 2")]
+    public ModeConfig coordinateTraining2Mode;
+
     [Header("Mode 2 — AI Mode")]
     [Tooltip("Link your EmptyBoardMode GameObject here.")]
     public GameObject ai_EmptyBoardModeObject;
@@ -105,6 +108,7 @@ public class InputBasedMainMenuController : MonoBehaviour
 
     private void ProcessModeInput(string input)
     {
+        if (mainMenuPanel == null || !mainMenuPanel.activeInHierarchy) return;
         if (string.IsNullOrEmpty(input)) return;
 
         // Convert to lowercase for case-insensitive comparison
@@ -124,11 +128,12 @@ public class InputBasedMainMenuController : MonoBehaviour
     {
         switch (input)
         {
-            case "a1": return coordinateMode;  // Coordinate Training
-            case "b2": return colorMode;       // Square Color Training
-            case "c3": return movingMode;      // Moving Mode
-            case "d4": return aiMode;          // AI Mode
-            case "e5": return versusMode;      // Online Battle
+            case "a1": return coordinateMode;          // Coordinate Training
+            case "b2": return coordinateTraining2Mode; // Coordinate Training 2
+            case "c3": return colorMode;               // Square Color Training
+            case "d4": return movingMode;              // Knight's Tour
+            case "e5": return aiMode;                  // AI Battle
+            case "f6": return versusMode;              // Online Battle
             default: return null;
         }
     }

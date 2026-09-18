@@ -53,6 +53,13 @@ public class KeyboardClackSoundRandom : MonoBehaviour
         lastTextLength = newLen;
     }
 
+    public void ResetTextTracking()
+    {
+        if (inputField == null) inputField = GetComponent<TMP_InputField>();
+        lastTextLength = inputField.text.Length;
+        isBulkInsertFrame = false;
+    }
+
     private void LateUpdate()
     {
         // Reset bulk flag at end of frame so it doesn’t block next keystroke
